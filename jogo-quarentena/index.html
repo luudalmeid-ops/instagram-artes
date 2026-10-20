@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#171a16">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+</head>
+<body>
+<!--GAME-START-->
+<title>Zona de Quarentena</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=VT323&display=swap">
+<style>
+/* Layout: uma tela de posto de controle — HUD, cabine com o sobrevivente, mesa de exames, decisão */
+:root {
+  --bg: #171a16;
+  --panel: #23281f;
+  --panel-2: #2e3528;
+  --line: #3d4634;
+  --fg: #e9e5d3;
+  --muted: #a3a48f;
+  --accent: #e3a83b;
+  --danger: #d4523f;
+  --safe: #5cae67;
+  --screen: #0f1a12;
+  --screen-fg: #8fe39b;
+  --f-display: "Chakra Petch", "Trebuchet MS", system-ui, sans-serif;
+  --f-body: "Chakra Petch", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-data: "VT323", ui-monospace, "Courier New", monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--f-body); font-size: 15px;
+  -webkit-tap-highlight-color: transparent; user-select: none;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+
+#app {
+  max-width: 520px; margin: 0 auto; min-height: 100%;
+  display: flex; flex-direction: column; gap: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px;
+}
+
+.hud { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.hud-item {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+  padding: 4px 6px; display: flex; flex-direction: column; min-width: 0;
+}
+.lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.val { font-family: var(--f-data); font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
+.val.warn { color: var(--danger); }
+.strikes { color: var(--danger); letter-spacing: 2px; }
+
+.booth {
+  display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: start;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px;
+}
+.portrait-wrap { position: relative; width: 150px; aspect-ratio: 1; max-width: 100%; }
+#cv { width: 100%; height: 100%; border-radius: 3px; transition: filter .4s; }
+#cv.gone { filter: grayscale(1) brightness(.45); }
+.stamp {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-12deg);
+  font-family: var(--f-display); font-weight: 700; font-size: 19px; letter-spacing: .06em;
+  padding: 3px 8px; border: 3px solid currentColor; border-radius: 3px;
+  background: rgba(0,0,0,.35); animation: stamp .25s ease-out;
+}
+.stamp.ok { color: var(--safe); } .stamp.bad { color: var(--danger); }
+@keyframes stamp { from { transform: translate(-50%, -50%) rotate(-12deg) scale(1.8); opacity: 0; } }
+.ident { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.nome { font-family: var(--f-display); font-weight: 700; font-size: 18px; text-wrap: balance; }
+.info { font-size: 12px; color: var(--muted); }
+.fala {
+  margin: 6px 0 0; padding: 8px 10px; background: var(--panel-2); border-radius: 4px;
+  font-size: 14px; line-height: 1.35; position: relative;
+}
+.fala::before {
+  content: ""; position: absolute; left: -6px; top: 12px;
+  border: 6px solid transparent; border-left: 0; border-right-color: var(--panel-2);
+}
+
+.exam { display: grid; grid-template-columns: 1.25fr 1fr; gap: 10px; }
+.exam-view {
+  position: relative; background: var(--screen); border: 1px solid var(--line); border-radius: 6px;
+  overflow: hidden; aspect-ratio: 64 / 40; max-width: 100%;
+}
+#ex { width: 100%; height: 100%; }
+.ex-msg {
+  position: absolute; inset: auto 0 0 0; padding: 3px 8px;
+  font-family: var(--f-data); font-size: 20px; color: var(--screen-fg);
+  background: linear-gradient(transparent, rgba(0,0,0,.65));
+}
+.ex-msg:empty { display: none; }
+.scanbar { position: absolute; left: 0; right: 0; top: 0; height: 3px; }
+.scanbar i { display: block; height: 100%; width: 0; background: var(--screen-fg); }
+.ficha {
+  list-style: none; margin: 0; padding: 8px; min-width: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  display: flex; flex-direction: column; gap: 4px; font-size: 13px;
+}
+.ficha .tit { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.ficha li.row { display: flex; justify-content: space-between; gap: 6px; cursor: pointer; }
+.ficha li.row b { font-family: var(--f-data); font-weight: 400; font-size: 18px; line-height: 1; }
+.ficha .vazio { color: var(--muted); font-size: 12px; }
+
+.tools { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.tool {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px;
+  padding: 8px 2px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-size: 11px; min-width: 0;
+}
+.tool canvas { width: 28px; height: 28px; }
+.tool:hover:not(:disabled) { border-color: var(--muted); }
+.tool.on { border-color: var(--accent); }
+.tool.done span::after { content: " ✓"; color: var(--safe); }
+.tool:disabled { opacity: .35; cursor: default; }
+
+.decide { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn {
+  border: 0; border-radius: 6px; padding: 14px 10px;
+  font-family: var(--f-display); font-weight: 700; font-size: 17px; letter-spacing: .08em; text-transform: uppercase;
+  box-shadow: inset 0 -4px 0 rgba(0,0,0,.28);
+}
+.btn:active { transform: translateY(2px); box-shadow: inset 0 -2px 0 rgba(0,0,0,.28); }
+.btn.danger { background: var(--danger); color: #fff; }
+.btn.safe { background: var(--safe); color: #0d1a0f; }
+.btn.main { background: var(--accent); color: #1c1405; width: 100%; }
+.btn:disabled { opacity: .45; }
+.foot { display: flex; justify-content: space-between; }
+.link { background: none; border: 0; color: var(--muted); font-size: 13px; padding: 4px 0; text-decoration: underline; text-underline-offset: 3px; }
+
+.ov {
+  position: fixed; inset: 0; background: rgba(8,10,7,.82); z-index: 20;
+  display: grid; place-items: center;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px));
+}
+.card {
+  width: 100%; max-width: 440px; max-height: 100%; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px;
+  display: flex; flex-direction: column; gap: 12px; user-select: text;
+}
+.card h2 { margin: 0; font-family: var(--f-display); font-size: 26px; text-wrap: balance; }
+.card h2.bad { color: var(--danger); }
+.card p { margin: 0; line-height: 1.45; color: var(--fg); }
+.card .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--accent); }
+.rules { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.rules li { background: var(--panel-2); border-radius: 5px; padding: 8px 10px; font-size: 14px; line-height: 1.4; }
+.rules li b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.rules li.novo { outline: 1px solid var(--accent); }
+.rules li.novo b::after { content: "  novo"; color: var(--accent); }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.stats div { background: var(--panel-2); border-radius: 5px; padding: 8px 10px; display: flex; flex-direction: column; }
+.stats b { font-family: var(--f-data); font-size: 28px; font-weight: 400; line-height: 1; }
+.stats span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  width: min(480px, calc(100% - 32px)); z-index: 15;
+  background: var(--panel-2); border-left: 4px solid var(--accent); border-radius: 5px;
+  padding: 10px 12px; font-size: 14px; line-height: 1.35; box-shadow: 0 6px 24px rgba(0,0,0,.5);
+}
+.toast.ok { border-left-color: var(--safe); } .toast.bad { border-left-color: var(--danger); }
+
+@media (max-width: 400px) {
+  .booth { grid-template-columns: 116px 1fr; }
+  .portrait-wrap { width: 116px; }
+  .exam { grid-template-columns: 1fr; }
+  .val { font-size: 21px; }
+}
+@media (prefers-reduced-motion: reduce) { .stamp { animation: none; } #cv { transition: none; } }
+</style>
+
+<div id="app">
+  <header class="hud">
+    <div class="hud-item"><span class="lbl">Dia</span><span id="hDia" class="val">1</span></div>
+    <div class="hud-item"><span class="lbl">Turno</span><span id="hTempo" class="val">0:00</span></div>
+    <div class="hud-item"><span class="lbl">Fila</span><span id="hFila" class="val">0</span></div>
+    <div class="hud-item"><span class="lbl">Pontos</span><span id="hPts" class="val">0</span></div>
+    <div class="hud-item"><span class="lbl">Erros</span><span id="hErros" class="val strikes">□□□</span></div>
+  </header>
+
+  <section class="booth">
+    <div class="portrait-wrap">
+      <canvas id="cv" width="48" height="48"></canvas>
+      <div id="stamp" class="stamp" hidden></div>
+    </div>
+    <div class="ident">
+      <div id="pNome" class="nome">Posto 7 — Portão Leste</div>
+      <div id="pInfo" class="info">Aguardando a fila</div>
+      <p id="pFala" class="fala">Próximo!</p>
+    </div>
+  </section>
+
+  <section class="exam">
+    <div class="exam-view">
+      <canvas id="ex" width="64" height="40"></canvas>
+      <div id="exMsg" class="ex-msg"></div>
+      <div class="scanbar"><i id="scan"></i></div>
+    </div>
+    <ul id="ficha" class="ficha"></ul>
+  </section>
+
+  <div id="tools" class="tools"></div>
+
+  <div class="decide">
+    <button id="bElim" class="btn danger" type="button">Eliminar</button>
+    <button id="bSalv" class="btn safe" type="button">Salvar</button>
+  </div>
+
+  <footer class="foot">
+    <button id="bManual" class="link" type="button">Manual do fiscal</button>
+    <button id="bSom" class="link" type="button">Som: ligado</button>
+  </footer>
+</div>
+
+<div id="ov" class="ov" hidden><div id="ovCard" class="card"></div></div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const R = (a, b) => a + Math.random() * (b - a);
+const RI = (a, b) => Math.floor(R(a, b + 1));
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const chance = p => Math.random() < p;
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = RI(0, i); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const fmtT = v => v.toFixed(1).replace(".", ",") + " °C";
+
+function rng(seed) {
+  return () => {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = [n >> 16, n >> 8 & 255, n & 255].map(v => Math.round(f < 0 ? v * (1 + f) : v + (255 - v) * f));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+// ---------- Regras ----------
+const TOOLS = [
+  { id: "temp",    nome: "Termômetro", dia: 1, regra: "Febre de 38,0 °C ou mais é sinal de infecção. Até 37,9 °C pode passar." },
+  { id: "olhos",   nome: "Lanterna",   dia: 1, regra: "Parte branca do olho amarelada, com pupila que não diminui na luz, é infecção. Olho vermelho de cansaço é normal." },
+  { id: "bracos",  nome: "Braços",     dia: 2, regra: "Mordida (marca de dentes vermelha com roxo em volta) é infecção. Cicatriz clara e tatuagem são normais." },
+  { id: "pulso",   nome: "Pulso",      dia: 3, regra: "Pulso abaixo de 50 bpm é infecção. Pulso acelerado é só nervosismo." },
+  { id: "pescoco", nome: "Pescoço",    dia: 4, regra: "Veias escuras e arroxeadas subindo pelo pescoço são infecção. Colar e tatuagem são normais." },
+];
+const SIGN_TXT = {
+  temp: p => `febre de ${fmtT(p.temp)}`,
+  olhos: () => "olhos amarelados",
+  bracos: () => "uma mordida no braço",
+  pulso: p => `pulso de ${p.pulso} bpm`,
+  pescoco: () => "veias escuras no pescoço",
+};
+const SCAN_T = 0.9;
+
+// ---------- Pessoas ----------
+const NOMES_F = ["Ana", "Bruna", "Carla", "Dandara", "Elisa", "Fernanda", "Graça", "Helena", "Iara", "Joana", "Kátia", "Luana", "Marta", "Neide", "Olívia", "Priscila", "Rita", "Sônia", "Tereza", "Vitória"];
+const NOMES_M = ["André", "Bento", "Caio", "Davi", "Edson", "Fábio", "Gilberto", "Hugo", "Igor", "Jorge", "Luiz", "Márcio", "Nelson", "Otávio", "Paulo", "Raimundo", "Sérgio", "Tiago", "Valter", "Wesley"];
+const SOBRENOMES = ["Silva", "Souza", "Oliveira", "Santos", "Lima", "Pereira", "Costa", "Rocha", "Almeida", "Barbosa", "Ferreira", "Nunes", "Moura", "Cardoso", "Teixeira", "Ramos"];
+const OFICIOS = ["enfermeira", "pedreiro", "professora", "motorista", "cozinheiro", "estudante", "agricultora", "mecânico", "costureira", "vendedor", "eletricista", "aposentada"];
+const ORIGENS = ["Setor Norte", "Vila Industrial", "Bairro do Porto", "Rodovia 116", "Centro antigo", "Zona rural", "Hospital Regional", "Estação de trem"];
+const FALAS = [
+  "Andei três dias até chegar aqui.", "Minha filha já passou pelo portão ontem.", "Pode examinar, não tenho nada.",
+  "Faz dois dias que eu não como direito.", "Só quero dormir num lugar seguro.", "Eu era voluntário no abrigo antigo.",
+  "Perdi meus documentos na estrada.", "Tô com frio, mas é a chuva.", "Por favor, seja rápido.",
+  "Me escondi num mercado a semana toda.", "Eu vi o que acontece com quem fica lá fora.", "Tenho remédio de pressão, só isso.",
+  "Vim com um grupo, mas me perdi deles.", "Juro que ninguém me tocou.", "Só arranhei o braço numa cerca.",
+  "Meu coração tá disparado, desculpa.", "Não durmo há dias.", "Você vai me deixar entrar, né?",
+];
+const PELES = ["#f1c9a5", "#e0ac83", "#c68a5e", "#a8693f", "#7d4a2a", "#5c3420"];
+const CABELOS = ["#1d1611", "#3b2416", "#6a4423", "#a0743b", "#c9b48a", "#8d8b86"];
+const ROUPAS = ["#4f6d7a", "#7a4f4f", "#5b7a4f", "#6b5b7a", "#8a7a4a", "#3d4a5c", "#9a5b3a", "#4a5a4a"];
+const IRIS = ["#5a3a1e", "#3a6a8a", "#4a7a4a", "#2a1a10", "#7a6a3a"];
+const ESTILOS = ["curto", "longo", "careca", "bone", "cacheado", "coque"];
+
+function makePerson(day) {
+  const unlocked = TOOLS.filter(t => t.dia <= day).map(t => t.id);
+  const infected = chance(Math.min(0.38 + day * 0.02, 0.5));
+  let signs = [];
+  if (infected) {
+    const n = day <= 2 ? RI(1, 2) : (chance(day >= 6 ? 0.85 : 0.65) ? 1 : 2);
+    signs = shuffle(unlocked.slice()).slice(0, Math.min(n, unlocked.length));
+  }
+  const has = id => signs.includes(id);
+  const dist = () => day >= 2 && chance(Math.min(0.12 + day * 0.06, 0.45));
+  const fem = chance(0.5);
+  const idade = RI(17, 74);
+  const p = {
+    seed: RI(1, 1e9), infected, signs, fem, idade,
+    nome: `${pick(fem ? NOMES_F : NOMES_M)} ${pick(SOBRENOMES)}`,
+    oficio: idade > 64 ? (fem ? "aposentada" : "aposentado") : pick(OFICIOS),
+    origem: pick(ORIGENS), fala: pick(FALAS),
+    pele: pick(PELES), cabelo: idade > 60 && chance(.6) ? "#b9b6ae" : pick(CABELOS),
+    roupa: pick(ROUPAS), iris: pick(IRIS),
+    estilo: fem ? pick(["longo", "coque", "cacheado", "curto", "bone"]) : pick(ESTILOS),
+    barba: !fem && chance(.35), oculos: chance(.18),
+  };
+  p.temp = has("temp") ? R(38.2, 40.2) : dist() ? R(37.6, 37.9) : R(36.0, 37.4);
+  p.olhos = has("olhos") ? "amarelo" : dist() ? "vermelho" : "normal";
+  p.bracos = has("bracos") ? "mordida" : dist() ? pick(["cicatriz", "tatuagem"]) : "limpo";
+  p.pulso = has("pulso") ? RI(28, 46) : dist() ? RI(112, 128) : RI(62, 98);
+  p.pescoco = has("pescoco") ? "veias" : dist() ? pick(["colar", "tatuagem"]) : "limpo";
+  return p;
+}
+
+// ---------- Desenho ----------
+function painter(ctx) {
+  return (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+}
+function disc(px, cx, cy, r, c, inside) {
+  for (let y = Math.floor(cy - r); y <= cy + r; y++)
+    for (let x = Math.floor(cx - r); x <= cx + r; x++)
+      if ((x + .5 - cx) ** 2 + (y + .5 - cy) ** 2 <= r * r && (!inside || inside(x, y))) px(x, y, 1, 1, c);
+}
+
+const cv = $("#cv"), cx = cv.getContext("2d"), P = painter(cx);
+function drawPortrait(p, t) {
+  P(0, 0, 48, 48, "#2b3127");
+  for (let y = 4; y < 48; y += 6) P(0, y, 48, 1, "#343b2f");
+  for (let y = 4; y < 48; y += 12) P(0, y, 4, 1, "#596349");
+  if (!p) {
+    P(16, 14, 16, 22, "#22281f"); P(10, 34, 28, 14, "#22281f");
+    return;
+  }
+  const bob = Math.sin(t * 2 + p.seed) > .6 ? 1 : 0;
+  const sk = p.pele, skD = shade(sk, -.18), hair = p.cabelo;
+  const o = bob;
+  // corpo
+  P(8, 38 + o, 32, 10, p.roupa); P(7, 40 + o, 34, 8, p.roupa);
+  P(8, 38 + o, 32, 1, shade(p.roupa, .15));
+  P(20, 31 + o, 8, 8, skD); P(21, 38 + o, 6, 2, skD);
+  // cabeça
+  if (p.estilo === "longo") P(13, 12 + o, 22, 20, hair);
+  P(16, 10 + o, 16, 1, sk); P(15, 11 + o, 18, 20, sk); P(16, 31 + o, 16, 1, sk);
+  P(30, 12 + o, 3, 19, skD); P(14, 19 + o, 1, 4, skD); P(33, 19 + o, 1, 4, skD);
+  // cabelo
+  const H = (x, y, w, h) => P(x, y + o, w, h, hair);
+  switch (p.estilo) {
+    case "curto": H(15, 8, 18, 4); H(15, 12, 2, 5); H(31, 12, 2, 5); break;
+    case "longo": H(14, 7, 20, 5); H(14, 12, 3, 8); H(31, 12, 3, 8); break;
+    case "cacheado": H(12, 4, 24, 9); H(12, 12, 4, 10); H(32, 12, 4, 10);
+      for (let i = 0; i < 6; i++) P(13 + i * 4, 4 + o, 2, 1, shade(hair, .12)); break;
+    case "coque": H(15, 8, 18, 4); H(21, 4, 6, 4); H(15, 12, 2, 3); H(31, 12, 2, 3); break;
+    case "bone": { const c = shade(p.roupa, -.25);
+      P(14, 7 + o, 20, 5, c); P(14, 12 + o, 22, 2, shade(c, -.2)); H(15, 14, 2, 3); H(31, 14, 2, 3); break; }
+    case "careca": P(18, 12 + o, 3, 1, shade(sk, .18)); break;
+  }
+  // rosto
+  P(18, 18 + o, 4, 1, shade(hair, -.2)); P(26, 18 + o, 4, 1, shade(hair, -.2));
+  const blink = (t * 1.3 + p.seed % 7) % 4 < .12;
+  if (blink) { P(18, 21 + o, 4, 1, skD); P(26, 21 + o, 4, 1, skD); }
+  else {
+    P(18, 20 + o, 4, 2, "#efeadc"); P(26, 20 + o, 4, 2, "#efeadc");
+    P(20, 20 + o, 2, 2, p.iris); P(28, 20 + o, 2, 2, p.iris);
+    P(20, 21 + o, 1, 1, "#111"); P(28, 21 + o, 1, 1, "#111");
+  }
+  if (p.oculos) {
+    const g = "#20201c"; P(17, 19 + o, 6, 1, g); P(25, 19 + o, 6, 1, g); P(17, 22 + o, 6, 1, g); P(25, 22 + o, 6, 1, g);
+    P(17, 19 + o, 1, 4, g); P(22, 19 + o, 1, 4, g); P(25, 19 + o, 1, 4, g); P(30, 19 + o, 1, 4, g); P(23, 20 + o, 2, 1, g);
+  }
+  P(24, 22 + o, 1, 3, skD); P(23, 25 + o, 3, 1, skD);
+  if (p.barba) { const b = shade(hair, -.1); P(16, 26 + o, 16, 5, b); P(18, 31 + o, 12, 1, b); P(21, 27 + o, 6, 1, shade(sk, -.35)); }
+  else P(21, 27 + o, 6, 1, shade(sk, -.35));
+  if (p.idade > 55) { P(17, 23 + o, 2, 1, skD); P(29, 23 + o, 2, 1, skD); }
+}
+
+const ex = $("#ex"), ec = ex.getContext("2d"), E = painter(ec);
+function drawExam(p, view, t, since) {
+  E(0, 0, 64, 40, "#0f1a12");
+  if (!p || !view) {
+    for (let y = 0; y < 40; y += 2) E(0, y, 64, 1, "#122016");
+    return;
+  }
+  const r = rng(p.seed + view.length);
+  const sk = p.pele, skD = shade(sk, -.2), skL = shade(sk, .15);
+  if (view === "temp") {
+    for (let y = 0; y < 40; y += 2) E(0, y, 64, 1, "#122016");
+    E(28, 3, 8, 28, "#d9dccf"); E(29, 4, 6, 26, "#26302a");
+    disc(E, 32, 33, 5, "#d9dccf"); disc(E, 32, 33, 4, "#d23a2a");
+    const lvl = Math.max(0, Math.min(1, (p.temp - 34) / 8)) * Math.min(1, since * 1.6);
+    const hgt = Math.round(lvl * 25);
+    E(30, 30 - hgt, 4, hgt + 1, "#d23a2a");
+    for (let d = 34; d <= 42; d++) { const y = 30 - Math.round((d - 34) / 8 * 25); E(37, y, d % 2 ? 2 : 4, 1, "#8fe39b"); }
+  } else if (view === "pulso") {
+    for (let x = 0; x < 64; x += 8) E(x, 0, 1, 40, "#132619");
+    for (let y = 0; y < 40; y += 8) E(0, y, 64, 1, "#132619");
+    const per = 60 / p.pulso, speed = 28; // px/s
+    const off = (t * speed) % (per * speed);
+    let prev = 22;
+    for (let x = 0; x < 64; x++) {
+      const ph = ((x + off) % (per * speed));
+      let y = 22;
+      if (ph > 10 && ph < 12) y = 19; else if (ph >= 12 && ph < 13) y = 6;
+      else if (ph >= 13 && ph < 14) y = 32; else if (ph >= 14 && ph < 15) y = 24;
+      else if (ph > 20 && ph < 24) y = 20;
+      const a = Math.min(prev, y), b = Math.max(prev, y);
+      E(x, a, 1, b - a + 1, "#8fe39b"); prev = y;
+    }
+  } else if (view === "olhos") {
+    E(0, 0, 64, 40, sk);
+    const inEye = (x, y) => { const k = (x - 8) / 48; if (k < 0 || k > 1) return false; return Math.abs(y + .5 - 20) < 15 * Math.sin(Math.PI * k); };
+    const scl = p.olhos === "amarelo" ? "#d6c046" : "#f0ece0";
+    for (let y = 0; y < 40; y++) for (let x = 0; x < 64; x++) if (inEye(x, y)) E(x, y, 1, 1, scl);
+    if (p.olhos === "vermelho") for (let i = 0; i < 9; i++) {
+      let x = r() < .5 ? RIr(r, 10, 20) : RIr(r, 44, 54), y = RIr(r, 14, 26);
+      for (let s = 0; s < 6; s++) { if (inEye(x, y)) E(x, y, 1, 1, "#c8433a"); x += x < 32 ? 1 : -1; y += Math.round(r() * 2 - 1); }
+    }
+    if (p.olhos === "amarelo") for (let i = 0; i < 14; i++) { const x = RIr(r, 10, 54), y = RIr(r, 10, 30); if (inEye(x, y)) E(x, y, 1, 1, "#a8902a"); }
+    disc(E, 32, 20, 10, p.iris, inEye); disc(E, 32, 20, 10, "rgba(0,0,0,.18)", (x, y) => inEye(x, y) && y < 15);
+    const pr = p.olhos === "amarelo" ? 6.5 : Math.max(2.5, 6.5 - since * 5);
+    disc(E, 32, 20, pr, "#0b0b0b", inEye);
+    E(35, 15, 2, 2, "#ffffff");
+    for (let x = 8; x < 57; x++) { const k = (x - 8) / 48, h = 15 * Math.sin(Math.PI * k); E(x, Math.round(20 - h) - 1, 1, 2, skD); }
+  } else if (view === "bracos") {
+    E(0, 0, 64, 40, "#1d241c");
+    E(0, 7, 64, 26, sk); E(0, 7, 64, 2, skL); E(0, 29, 64, 4, skD);
+    for (let i = 0; i < 30; i++) E(RIr(r, 0, 63), RIr(r, 10, 27), 1, 1, shade(sk, -.08));
+    const cx0 = RIr(r, 22, 42), cy0 = 19;
+    if (p.bracos === "mordida") {
+      disc(E, cx0, cy0, 9, "rgba(96,40,92,.45)"); disc(E, cx0, cy0, 6, "rgba(150,40,50,.4)");
+      for (let a = 0; a < 7; a++) {
+        const ang = Math.PI * (0.12 + a * 0.127);
+        E(Math.round(cx0 - 6 * Math.cos(ang)), Math.round(cy0 - 4 * Math.sin(ang)) - 1, 2, 2, "#7e1414");
+        E(Math.round(cx0 - 6 * Math.cos(ang)), Math.round(cy0 + 4 * Math.sin(ang)), 2, 2, "#7e1414");
+      }
+    } else if (p.bracos === "cicatriz") {
+      for (let i = 0; i < 16; i++) E(cx0 - 8 + i, cy0 + Math.round(i * .3) - 2, 1, 1, shade(sk, .35));
+      for (let i = 0; i < 4; i++) E(cx0 - 6 + i * 4, cy0 - 4 + Math.round(i * 1.2), 1, 4, shade(sk, .25));
+    } else if (p.bracos === "tatuagem") {
+      const c = "#243a5a";
+      E(cx0 - 3, cy0 - 5, 2, 2, c); E(cx0 + 1, cy0 - 5, 2, 2, c); E(cx0 - 4, cy0 - 4, 8, 3, c);
+      E(cx0 - 3, cy0 - 1, 6, 2, c); E(cx0 - 2, cy0 + 1, 4, 1, c); E(cx0 - 1, cy0 + 2, 2, 1, c);
+    }
+  } else if (view === "pescoco") {
+    E(0, 0, 64, 40, sk); E(0, 0, 64, 5, skD); E(0, 5, 64, 1, shade(sk, -.1));
+    E(0, 33, 64, 7, p.roupa); E(22, 30, 20, 3, p.roupa); E(26, 28, 12, 2, p.roupa); E(28, 33, 8, 3, skD);
+    if (p.pescoco === "veias") {
+      for (let b = 0; b < 4; b++) {
+        let x = RIr(r, 12, 52), y = 30;
+        while (y > 6) {
+          E(x, y, 1, 2, "#3b1d45"); if (r() < .5) E(x + 1, y, 1, 1, "#6a3a74");
+          if (r() < .18) { let bx = x, by = y; for (let k = 0; k < 6; k++) { bx += r() < .5 ? -1 : 1; by--; E(bx, by, 1, 1, "#5a2c63"); } }
+          x += Math.round(r() * 2 - 1); y -= 1;
+        }
+      }
+    } else if (p.pescoco === "colar") {
+      for (let x = 8; x < 56; x += 2) E(x, Math.round(14 + 10 * Math.sin(Math.PI * (x - 8) / 48)), 1, 1, "#d8b04a");
+      E(31, 24, 3, 4, "#d8b04a");
+    } else if (p.pescoco === "tatuagem") {
+      const c = "#243a5a", x0 = RIr(r, 14, 44), y0 = 14;
+      E(x0 + 2, y0, 1, 7, c); E(x0 - 1, y0 + 3, 7, 1, c); E(x0, y0 + 1, 1, 1, c); E(x0 + 4, y0 + 1, 1, 1, c); E(x0, y0 + 5, 1, 1, c); E(x0 + 4, y0 + 5, 1, 1, c);
+    }
+  }
+}
+function RIr(r, a, b) { return a + Math.floor(r() * (b - a + 1)); }
+
+function toolIcon(id) {
+  const c = document.createElement("canvas"); c.width = c.height = 14;
+  const k = painter(c.getContext("2d")), g = "#e9e5d3", a = "#e3a83b";
+  if (id === "temp") { k(6, 1, 3, 9, g); k(7, 2, 1, 7, a); k(5, 10, 5, 3, a); }
+  if (id === "olhos") { k(2, 6, 10, 2, g); k(3, 5, 8, 4, g); k(5, 4, 4, 6, a); k(6, 6, 2, 2, "#171a16"); }
+  if (id === "bracos") { k(1, 5, 12, 5, g); k(5, 6, 1, 1, a); k(7, 6, 1, 1, a); k(5, 8, 1, 1, a); k(7, 8, 1, 1, a); }
+  if (id === "pulso") { k(0, 7, 4, 1, g); k(4, 3, 1, 4, a); k(5, 7, 1, 4, a); k(6, 7, 8, 1, g); }
+  if (id === "pescoco") { k(4, 1, 6, 6, g); k(5, 7, 4, 3, g); k(2, 10, 10, 3, a); }
+  return c;
+}
+
+// ---------- Som ----------
+let actx = null;
+function beep(f, d = .08, type = "square", vol = .05, slide = 0) {
+  if (!S.som) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain(), n = actx.currentTime;
+    o.type = type; o.frequency.setValueAtTime(f, n);
+    if (slide) o.frequency.linearRampToValueAtTime(f + slide, n + d);
+    g.gain.setValueAtTime(vol, n); g.gain.exponentialRampToValueAtTime(.0001, n + d);
+    o.connect(g); g.connect(actx.destination); o.start(n); o.stop(n + d + .02);
+  } catch (e) {}
+}
+
+// ---------- Estado ----------
+const S = { day: 1, score: 0, best: 0, strikes: 0, queue: [], idx: 0, cur: null, time: 0, phase: "intro",
+  checked: {}, view: null, viewAt: 0, scan: null, streak: 0, dia: null, som: true, last: "" };
+try { S.best = +localStorage.getItem("zq-best") || 0; } catch (e) {}
+
+function dayConfig(d) {
+  const n = Math.min(5 + d, 14);
+  return { n, time: Math.max(n * 8, n * 13 - (d - 1) * 6) };
+}
+
+function startGame() {
+  Object.assign(S, { day: 1, score: 0, strikes: 0, streak: 0 });
+  dayIntro();
+}
+function dayIntro() {
+  const cfg = dayConfig(S.day);
+  S.queue = Array.from({ length: cfg.n }, () => makePerson(S.day));
+  S.idx = 0; S.cur = null; S.time = cfg.time; S.phase = "intro"; S.view = null;
+  S.dia = { salvos: 0, eliminados: 0, acertos: 0, erros: 0 };
+  const novos = TOOLS.filter(t => t.dia === S.day);
+  const intro = S.day === 1
+    ? `<p>Você é o fiscal do Portão Leste. Examine cada sobrevivente e decida: <b>salvar</b> quem está saudável, <b>eliminar</b> quem tem sinal de infecção.</p>
+       <p>Deixar um infectado entrar acaba com a zona: fim de jogo na hora. Eliminar um inocente conta como erro. Com 3 erros, você é afastado.</p>`
+    : novos.length ? `<p>Chegou equipamento novo: <b>${novos.map(t => t.nome).join(", ")}</b>. A fila também está maior.</p>`
+    : `<p>A infecção está mais difícil de ver. Mais gente na fila e menos tempo de turno.</p>`;
+  openOv(`<span class="eyebrow">Dia ${S.day} · ${cfg.n} na fila · turno de ${fmtTime(cfg.time)}</span>
+    <h2>${S.day === 1 ? "Zona de Quarentena" : "Dia " + S.day}</h2>${intro}
+    ${rulesHTML()}
+    <button class="btn main" id="go" type="button">Abrir o portão</button>`);
+  $("#go").onclick = () => { closeOv(); S.phase = "play"; beep(440, .1); beep(660, .12); nextPerson(); };
+  renderTools(); renderFicha(); renderHUD();
+}
+function rulesHTML() {
+  return `<ul class="rules">${TOOLS.filter(t => t.dia <= S.day).map(t =>
+    `<li class="${t.dia === S.day && S.day > 1 ? "novo" : ""}"><b>${t.nome}</b>${t.regra}</li>`).join("")}</ul>`;
+}
+function nextPerson() {
+  $("#stamp").hidden = true; cv.classList.remove("gone");
+  if (S.idx >= S.queue.length) return endDay(false);
+  const p = S.cur = S.queue[S.idx];
+  S.checked = {}; S.view = null; S.scan = null; S.phase = "play";
+  $("#pNome").textContent = p.nome;
+  $("#pInfo").textContent = `${p.idade} anos · ${p.oficio} · veio de ${p.origem}`;
+  $("#pFala").textContent = `“${p.fala}”`;
+  renderTools(); renderFicha(); renderHUD();
+}
+function useTool(id) {
+  if (!S.cur || (S.phase !== "play")) return;
+  const t = TOOLS.find(t => t.id === id);
+  if (!t || t.dia > S.day) return;
+  if (S.checked[id]) { S.view = id; S.viewAt = performance.now() / 1000 - 5; renderTools(); return; }
+  S.scan = { id, t: 0 }; S.phase = "scan"; S.view = null;
+  beep(880, .05); renderTools();
+}
+function finishScan() {
+  const id = S.scan.id; S.scan = null; S.phase = "play";
+  S.checked[id] = true; S.view = id; S.viewAt = performance.now() / 1000;
+  beep(1320, .06, "sine", .06);
+  renderTools(); renderFicha();
+}
+function decide(save) {
+  if (!S.cur || S.phase !== "play") return;
+  const p = S.cur;
+  const st = $("#stamp");
+  st.hidden = false; st.className = "stamp " + (save ? "ok" : "bad"); st.textContent = save ? "LIBERADO" : "ELIMINADO";
+  if (!save) cv.classList.add("gone");
+  S.phase = "anim";
+  if (save && p.infected) {
+    beep(180, .5, "sawtooth", .07, -120);
+    return setTimeout(() => gameOver("infectado", p), 900);
+  }
+  if (!save && !p.infected) {
+    S.strikes++; S.streak = 0; S.score = Math.max(0, S.score - 150); S.dia.erros++; S.dia.eliminados++;
+    beep(220, .3, "sawtooth", .06, -60);
+    toast(`${p.nome} estava saudável. ${distractorTxt(p)}`, "bad");
+    if (S.strikes >= 3) return setTimeout(() => gameOver("inocentes", p), 1100);
+  } else {
+    const bonus = Math.min(S.streak * 20, 200);
+    S.score += 100 + bonus; S.streak++; S.dia.acertos++;
+    save ? S.dia.salvos++ : S.dia.eliminados++;
+    beep(save ? 660 : 330, .09); beep(save ? 990 : 250, .12, "square", .04);
+    toast(save ? `Liberado. +${100 + bonus}` : `Infectado confirmado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${100 + bonus}`, "ok");
+  }
+  renderHUD();
+  setTimeout(() => { S.idx++; nextPerson(); }, 900);
+}
+function distractorTxt(p) {
+  const d = [];
+  if (p.temp >= 37.6) d.push(`${fmtT(p.temp)} ainda não é febre`);
+  if (p.olhos === "vermelho") d.push("olho vermelho era só cansaço");
+  if (p.bracos === "cicatriz") d.push("a marca no braço era cicatriz antiga");
+  if (p.bracos === "tatuagem") d.push("o desenho no braço era tatuagem");
+  if (p.pulso > 108 && S.day >= 3) d.push("pulso acelerado é nervosismo");
+  if (p.pescoco !== "limpo" && p.pescoco !== "veias" && S.day >= 4) d.push(`no pescoço era ${p.pescoco === "colar" ? "um colar" : "tatuagem"}`);
+  const f = d.filter((_, i) => i < 2).join("; ");
+  return f ? f.charAt(0).toUpperCase() + f.slice(1) + "." : "Nenhum exame mostrava sinal.";
+}
+function endDay(timeout) {
+  S.phase = "over-day"; S.scan = null;
+  const left = S.queue.length - S.idx;
+  const bonus = timeout ? 0 : Math.floor(S.time) * 2;
+  S.score += bonus; saveBest(); renderHUD();
+  beep(523, .1); beep(784, .15);
+  openOv(`<span class="eyebrow">Fim do turno</span>
+    <h2>Dia ${S.day} concluído</h2>
+    ${timeout ? `<p>O turno acabou com ${left} ${left === 1 ? "pessoa" : "pessoas"} ainda na fila. Elas voltaram para a estrada.</p>` : `<p>Fila zerada antes do fim do turno. Bônus de tempo: +${bonus}.</p>`}
+    <div class="stats">
+      <div><b>${S.dia.salvos}</b><span>Salvos</span></div>
+      <div><b>${S.dia.eliminados}</b><span>Eliminados</span></div>
+      <div><b>${S.dia.acertos}</b><span>Acertos</span></div>
+      <div><b>${S.strikes}/3</b><span>Erros no total</span></div>
+    </div>
+    <p>Pontuação: <b>${S.score}</b></p>
+    <button class="btn main" id="go" type="button">Começar dia ${S.day + 1}</button>`);
+  $("#go").onclick = () => { S.day++; dayIntro(); };
+}
+function gameOver(kind, p) {
+  S.phase = "over"; saveBest(); renderHUD();
+  const txt = kind === "infectado"
+    ? `<h2 class="bad">A zona foi contaminada</h2><p>Você liberou ${p.nome}, que tinha ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. A infecção se espalhou dentro dos muros.</p>`
+    : `<h2 class="bad">Você foi afastado do posto</h2><p>Três sobreviventes saudáveis foram eliminados no seu turno. O comando tirou você do portão.</p>`;
+  openOv(`<span class="eyebrow">Fim de jogo · Dia ${S.day}</span>${txt}
+    <div class="stats"><div><b>${S.score}</b><span>Pontos</span></div><div><b>${S.best}</b><span>Recorde</span></div></div>
+    <button class="btn main" id="go" type="button">Jogar de novo</button>`);
+  $("#go").onclick = startGame;
+}
+function saveBest() {
+  if (S.score > S.best) { S.best = S.score; try { localStorage.setItem("zq-best", S.best); } catch (e) {} }
+}
+
+// ---------- Interface ----------
+function fmtTime(s) { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+function renderHUD() {
+  $("#hDia").textContent = S.day;
+  $("#hTempo").textContent = fmtTime(S.time);
+  $("#hTempo").classList.toggle("warn", S.time < 15 && S.phase !== "intro");
+  $("#hFila").textContent = Math.max(0, S.queue.length - S.idx);
+  $("#hPts").textContent = S.score;
+  $("#hErros").textContent = "■".repeat(S.strikes) + "□".repeat(Math.max(0, 3 - S.strikes));
+  const can = S.phase === "play" && !!S.cur;
+  $("#bElim").disabled = $("#bSalv").disabled = !can;
+}
+function renderTools() {
+  const box = $("#tools");
+  if (!box.children.length) TOOLS.forEach((t, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "tool"; b.dataset.id = t.id; b.title = `${t.nome} (tecla ${i + 1})`;
+    b.append(toolIcon(t.id)); const s = document.createElement("span"); b.append(s);
+    b.onclick = () => useTool(t.id); box.append(b);
+  });
+  [...box.children].forEach(b => {
+    const t = TOOLS.find(t => t.id === b.dataset.id), locked = t.dia > S.day;
+    b.querySelector("span").textContent = locked ? `Dia ${t.dia}` : t.nome;
+    b.disabled = locked || !S.cur;
+    b.classList.toggle("done", !!S.checked[t.id]);
+    b.classList.toggle("on", S.view === t.id || (S.scan && S.scan.id === t.id));
+  });
+}
+function renderFicha() {
+  const f = $("#ficha"), p = S.cur;
+  const rows = TOOLS.filter(t => S.checked[t.id]).map(t => {
+    const v = t.id === "temp" ? fmtT(p.temp) : t.id === "pulso" ? `${p.pulso} bpm` : "ver";
+    return `<li class="row" data-id="${t.id}"><span>${t.nome}</span><b>${v}</b></li>`;
+  }).join("");
+  f.innerHTML = `<li class="tit">Ficha de triagem</li>${rows || `<li class="vazio">Nenhum exame feito. Use os botões abaixo.</li>`}`;
+  f.querySelectorAll(".row").forEach(li => li.onclick = () => useTool(li.dataset.id));
+}
+function openOv(html) { $("#ovCard").innerHTML = html; $("#ov").hidden = false; setTimeout(() => { const g = $("#go"); g && g.focus(); }, 30); }
+function closeOv() { $("#ov").hidden = true; }
+let toastT = 0;
+function toast(msg, kind) {
+  const t = $("#toast"); t.textContent = msg; t.className = "toast " + (kind || ""); t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600);
+}
+
+let paused = null;
+$("#bManual").onclick = () => {
+  if (!$("#ov").hidden || (S.phase !== "play" && S.phase !== "scan")) return;
+  paused = S.phase; S.phase = "paused";
+  openOv(`<span class="eyebrow">Manual do fiscal · turno pausado</span><h2>Sinais de infecção</h2>${rulesHTML()}
+    <p>Salvar um infectado encerra o jogo. Eliminar um saudável custa 150 pontos e um erro.</p>
+    <p class="info">Atalhos no teclado: 1 a 5 para os exames, E para eliminar, S para salvar.</p>
+    <button class="btn main" id="go" type="button">Voltar ao portão</button>`);
+  $("#go").onclick = () => { closeOv(); S.phase = paused; paused = null; };
+};
+$("#bSom").onclick = () => { S.som = !S.som; $("#bSom").textContent = "Som: " + (S.som ? "ligado" : "desligado"); };
+$("#bElim").onclick = () => decide(false);
+$("#bSalv").onclick = () => decide(true);
+document.addEventListener("keydown", e => {
+  if (!$("#ov").hidden) return;
+  const k = e.key.toLowerCase();
+  if (k >= "1" && k <= "5") useTool(TOOLS[+k - 1].id);
+  else if (k === "e") decide(false);
+  else if (k === "s") decide(true);
+});
+
+// ---------- Loop ----------
+let last = performance.now();
+function loop(nowMs) {
+  const now = nowMs / 1000, dt = Math.min(.1, (nowMs - last) / 1000); last = nowMs;
+  if (S.phase === "play" || S.phase === "scan") {
+    S.time -= dt;
+    if (S.time <= 0) { S.time = 0; endDay(true); }
+  }
+  if (S.scan && S.phase === "scan") {
+    S.scan.t += dt;
+    $("#scan").style.width = Math.min(100, S.scan.t / SCAN_T * 100) + "%";
+    if (S.scan.t >= SCAN_T) finishScan();
+  } else if (!S.scan) $("#scan").style.width = "0";
+  drawPortrait(S.cur, now);
+  const since = now - S.viewAt;
+  if (S.scan) {
+    drawExam(null, null);
+    for (let i = 0; i < 70; i++) E(Math.random() * 64 | 0, Math.random() * 40 | 0, 1, 1, "#2f5a37");
+  } else drawExam(S.cur, S.view, now, since);
+  const msg = S.scan ? "Examinando…" : !S.view ? (S.cur ? "Escolha um exame" : "") :
+    S.view === "temp" ? fmtT(S.cur.temp) : S.view === "pulso" ? `${S.cur.pulso} bpm` :
+    S.view === "olhos" ? "Olho sob a lanterna" : S.view === "bracos" ? "Antebraço" : "Pescoço";
+  if (msg !== S.last) { $("#exMsg").textContent = msg; S.last = msg; }
+  if (S.phase === "play" || S.phase === "scan") { $("#hTempo").textContent = fmtTime(S.time); $("#hTempo").classList.toggle("warn", S.time < 15); }
+  requestAnimationFrame(loop);
+}
+renderTools(); renderFicha(); renderHUD();
+startGame();
+requestAnimationFrame(loop);
+})();
+</script>
+<!--GAME-END-->
+<script>
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>
