@@ -304,7 +304,7 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
 
   <footer class="foot">
     <button id="bManual" class="link" type="button">Manual do fiscal</button>
-    <button id="bSom" class="link" type="button">Som: ligado</button>
+    <span style="display:flex;gap:16px"><button id="bMus" class="link" type="button">Música: ligada</button><button id="bSom" class="link" type="button">Efeitos: ligados</button></span>
   </footer>
 </div>
 
@@ -841,12 +841,104 @@ function noise(d, f, q, vol) {
     g.gain.setValueAtTime(vol, n); src.connect(bp); bp.connect(g); g.connect(actx.destination); src.start(n);
   } catch (e) {}
 }
+// ---------- Trilha sonora (gerada em tempo real) ----------
+const MUS = { on: true, started: false, step: 0, next: 0, out: null, rain: null, delay: null, vol: .5 };
+const BPM = 72, SIX = 60 / BPM / 4;
+const ACORDES = [[45, 48, 52], [41, 45, 48], [48, 52, 55], [40, 44, 47]]; // Lá m, Fá, Dó, Mi
+const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+function musInit() {
+  if (MUS.started || !MUS.on) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+    const n = actx.currentTime;
+    MUS.out = actx.createGain(); MUS.out.gain.setValueAtTime(0, n); MUS.out.gain.linearRampToValueAtTime(MUS.vol, n + 3);
+    MUS.out.connect(actx.destination);
+    const d = actx.createDelay(); d.delayTime.value = SIX * 3;
+    const fb = actx.createGain(); fb.gain.value = .38;
+    const lp = actx.createBiquadFilter(); lp.frequency.value = 1600;
+    d.connect(lp); lp.connect(fb); fb.connect(d); lp.connect(MUS.out); MUS.delay = d;
+    const len = actx.sampleRate * 2, buf = actx.createBuffer(1, len, actx.sampleRate), ch = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) ch[i] = Math.random() * 2 - 1;
+    const src = actx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const f = actx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 2400; f.Q.value = .5;
+    MUS.rain = actx.createGain(); MUS.rain.gain.value = 0;
+    src.connect(f); f.connect(MUS.rain); MUS.rain.connect(MUS.out); src.start();
+    MUS.next = actx.currentTime + .1; MUS.started = true;
+    setInterval(musTick, 50);
+  } catch (e) {}
+}
+function musMode() {
+  const ph = S.phase;
+  return ph === "cine" ? "cine" : ph === "gate" ? "gate" : ph === "play" || ph === "scan" || ph === "anim" ? "exam"
+    : ph === "lunge" ? "lunge" : "calma";
+}
+function tone(f, t, dur, type, vol, opts = {}) {
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (opts.detune) o.detune.value = opts.detune;
+  if (opts.drop) o.frequency.exponentialRampToValueAtTime(f * opts.drop, t + dur);
+  const atk = opts.atk || .005;
+  g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(vol, t + atk);
+  g.gain.setTargetAtTime(.0001, t + Math.max(atk, dur * (opts.hold || .3)), dur * .35);
+  let node = o;
+  if (opts.cut) { const lp = actx.createBiquadFilter(); lp.frequency.value = opts.cut; o.connect(lp); node = lp; }
+  node.connect(g); g.connect(MUS.out);
+  if (opts.send) g.connect(MUS.delay);
+  o.start(t); o.stop(t + dur * 2.5 + .1);
+}
+function tick(t, vol) {
+  const len = Math.floor(actx.sampleRate * .03), buf = actx.createBuffer(1, len, actx.sampleRate), ch = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = actx.createBufferSource(), hp = actx.createBiquadFilter(), g = actx.createGain();
+  src.buffer = buf; hp.type = "highpass"; hp.frequency.value = 6500; g.gain.value = vol;
+  src.connect(hp); hp.connect(g); g.connect(MUS.out); src.start(t);
+}
+function musTick() {
+  if (!MUS.on || !actx) return;
+  const mode = musMode(), now = actx.currentTime;
+  MUS.rain.gain.setTargetAtTime(mode === "gate" ? .05 : mode === "cine" ? .035 : .01, now, .8);
+  while (MUS.next < now + .25) { musStep(MUS.step, MUS.next, mode); MUS.next += SIX; MUS.step++; }
+}
+function musStep(step, t, mode) {
+  if (mode === "lunge") return;
+  const bar = Math.floor(step / 16) % 4, s16 = step % 16, ac = ACORDES[bar], BAR = SIX * 16;
+  const tenso = mode === "exam", agit = S.agit || 0;
+  if (s16 === 0) ac.forEach(m => {
+    const cut = tenso ? 700 + agit * 900 : 520;
+    tone(hz(m), t, BAR, "sawtooth", .022, { detune: -7, atk: 1.2, hold: .8, cut });
+    tone(hz(m), t, BAR, "sawtooth", .022, { detune: 7, atk: 1.2, hold: .8, cut });
+  });
+  if (tenso) {
+    if (s16 % 2 === 0) tone(hz(ac[0] - 12), t, SIX * 1.6, "triangle", .11, { cut: 500 });
+    if (s16 % 4 === 2) tick(t, .025 + agit * .03);
+    if (agit > .4 && (s16 === 0 || s16 === 2 || (agit > .7 && (s16 === 8 || s16 === 10))))
+      tone(s16 % 8 ? 50 : 62, t, .22, "sine", .32, { drop: .5 });
+    if (agit > .6 && s16 % 2 === 1 && Math.random() < agit - .4) tone(hz(ac[2] + 24), t, .15, "square", .015, { cut: 2500 });
+  } else {
+    if (s16 === 0 || (mode === "gate" && s16 === 8)) tone(hz(ac[0] - 12), t, BAR * .5, "sine", .14, { atk: .05, hold: .6 });
+    const PENTA = [69, 72, 74, 76, 79, 81];
+    if ([0, 6, 10, 14].includes(s16) && Math.random() < (mode === "cine" ? .5 : .32)) {
+      const m = Math.random() < .6 ? ac[Math.floor(Math.random() * 3)] + 24 : PENTA[Math.floor(Math.random() * PENTA.length)];
+      tone(hz(m), t, 1.4, "triangle", .07, { send: true, hold: .05 });
+      tone(hz(m) * 2, t, .6, "sine", .02, { send: true, hold: .05 });
+    }
+  }
+}
+function musDuck(sec) {
+  if (!MUS.out || !MUS.on) return;
+  const n = actx.currentTime; MUS.out.gain.cancelScheduledValues(n);
+  MUS.out.gain.setValueAtTime(.06, n); MUS.out.gain.linearRampToValueAtTime(MUS.vol, n + sec);
+}
+["pointerdown", "keydown"].forEach(ev => document.addEventListener(ev, musInit, { once: false, passive: true }));
+
 function gunshot() {
+  musDuck(2);
   noise(.5, 3200, .7, .9); noise(.9, 400, .5, .6);
   beep(110, .25, "sine", .5, -70); beep(60, .4, "triangle", .35, -30);
   setTimeout(() => noise(.25, 1800, 1, .12), 140);
 }
-function scream() { beep(520, .5, "sawtooth", .07, 380); noise(.6, 2400, 2, .25); }
+function scream() { musDuck(2.5); beep(520, .5, "sawtooth", .07, 380); noise(.6, 2400, 2, .25); }
 function splatter(heavy) {
   const c = $("#splat"), k = c.getContext("2d");
   c.height = Math.round(120 * innerHeight / Math.max(1, innerWidth));
@@ -1122,7 +1214,12 @@ $("#bManual").onclick = () => {
     <button class="btn main" id="go" type="button">Voltar ao portão</button>`);
   $("#go").onclick = () => { closeOv(); S.phase = paused; paused = null; };
 };
-$("#bSom").onclick = () => { S.som = !S.som; $("#bSom").textContent = "Som: " + (S.som ? "ligado" : "desligado"); };
+$("#bSom").onclick = () => { S.som = !S.som; $("#bSom").textContent = "Efeitos: " + (S.som ? "ligados" : "desligados"); };
+$("#bMus").onclick = e => {
+  e.stopPropagation(); MUS.on = !MUS.on; $("#bMus").textContent = "Música: " + (MUS.on ? "ligada" : "desligada");
+  if (MUS.on) musInit();
+  if (MUS.out) MUS.out.gain.setTargetAtTime(MUS.on ? MUS.vol : 0, actx.currentTime, .3);
+};
 $("#bElim").onclick = () => decide(false);
 $("#bSalv").onclick = () => decide(true);
 document.addEventListener("keydown", e => {
@@ -1194,7 +1291,7 @@ function loop(nowMs) {
   if (S.phase === "play" || S.phase === "scan") { $("#hTempo").textContent = fmtTime(S.time); $("#hTempo").classList.toggle("warn", S.time < 15); }
   requestAnimationFrame(loop);
 }
-if (location.hash === "#debug") window.__zq = { S, makePerson };
+if (location.hash === "#debug") window.__zq = { S, makePerson, MUS, ctx: () => actx };
 renderTools(); renderFicha(); renderHUD();
 startGame();
 requestAnimationFrame(loop);
