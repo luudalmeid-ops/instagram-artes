@@ -271,6 +271,79 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
   .exam { grid-template-columns: 1fr; }
   .val { font-size: 21px; }
 }
+/* ---- Tela única: tudo cabe na altura do aparelho, sem rolagem ---- */
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+#app { height: 100%; min-height: 0; gap: 6px; padding-block: 8px; overflow: hidden; }
+.hud, .base, .booth, .tools, .decide, .foot, .dlg, .choices { flex: none; }
+.hud { gap: 4px; }
+.hud-item { padding: 2px 6px; }
+.lbl { font-size: 9px; }
+.val { font-size: 20px; }
+.base { gap: 4px; }
+.base-item { padding: 3px 6px; gap: 2px; }
+.base-top { font-size: 9px; }
+.base-top b { font-size: 14px; }
+.base-sub { font-size: 10px; }
+#gate:not([hidden]), #mesa:not([hidden]) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+#gate .scene { flex: 1 1 auto; min-height: 0; }
+#gate .scene canvas { width: 100%; height: 100%; aspect-ratio: auto; object-fit: contain; }
+.dlg { min-height: 0; padding: 8px 12px; gap: 2px; }
+.dlg .txt { font-size: 15px; line-height: 1.35; min-height: 2.7em; }
+.choices { gap: 6px; }
+.opt { padding: 9px 12px; font-size: 14px; }
+.booth { padding: 8px; gap: 10px; grid-template-columns: auto 1fr; }
+.portrait-wrap { width: clamp(80px, 15vh, 136px); }
+.ident { gap: 3px; }
+.nome { font-size: 16px; }
+.info { font-size: 11px; }
+.chip { font-size: 10px; padding: 1px 6px; }
+.fala { margin-top: 2px; padding: 5px 8px; font-size: 13px; line-height: 1.3; }
+.exam { flex: 1 1 auto; min-height: 0; grid-template-columns: 1.45fr 1fr; gap: 6px; }
+.exam-view { aspect-ratio: auto; min-height: 0; height: 100%; }
+#ex { object-fit: contain; }
+.ex-msg { font-size: 18px; }
+.ficha { overflow-y: auto; min-height: 0; padding: 6px 8px; font-size: 12px; gap: 3px; }
+.ficha li.row b { font-size: 16px; }
+.tools { gap: 4px; }
+.tool { padding: 5px 2px 4px; font-size: 10px; gap: 2px; }
+.tool canvas { width: 22px; height: 22px; }
+.decide { gap: 8px; }
+.btn { padding: 11px 8px; font-size: 16px; }
+.link { font-size: 12px; padding: 0; }
+.card { padding: 16px; gap: 9px; }
+.card h2 { font-size: 22px; }
+.card p { font-size: 14px; line-height: 1.4; }
+.rules { gap: 5px; }
+.rules li { padding: 6px 9px; font-size: 13px; line-height: 1.35; }
+.stats div { padding: 6px 9px; }
+.stats b { font-size: 22px; }
+.report .r { padding: 5px 9px; font-size: 13px; }
+.report .r b { font-size: 18px; }
+.evento { padding: 5px 9px; font-size: 13px; }
+@media (max-width: 400px) {
+  .booth { grid-template-columns: auto 1fr; }
+  .portrait-wrap { width: clamp(76px, 14vh, 116px); }
+  .exam { grid-template-columns: 1.45fr 1fr; }
+}
+@media (max-height: 720px) {
+  #app { gap: 5px; padding-block: 6px; }
+  .base-sub { display: none; }
+  .fala { font-size: 12px; }
+  .opt { padding: 7px 10px; }
+  .btn { padding: 9px 8px; }
+  .tool canvas { width: 18px; height: 18px; }
+}
+.exam { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+.ficha { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; max-height: 3.4em; }
+.ficha .tit { width: 100%; }
+.ficha li.row { gap: 6px; }
+.scene { background: linear-gradient(#0c1222 50%, #22251f 50%); }
+@media (max-width: 400px) { .exam { grid-template-columns: 1fr; } }
+.cine-title { display: flex; flex-direction: column; gap: 10px; }
+.cine-title h1 { margin: 0; font-family: var(--f-display); font-size: clamp(28px, 8vw, 40px); letter-spacing: .04em; text-transform: uppercase; color: var(--fg); }
+.cine-title span { font-size: 14px; color: var(--muted); }
+.cine-title b { color: var(--accent); font-weight: 700; animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .stamp { animation: none; } #cv { transition: none; } }
 </style>
 
@@ -836,9 +909,58 @@ const CINE = [
   { txt: "Você é o novo fiscal do Portão Leste. O anterior deixou passar um homem com febre. Ninguém viu esse homem de novo.",
     draw: (K, t) => gateScene(K, t, null, 1) },
 ];
+function sfx(f, d, type, vol, o = {}) {
+  if (!S.som) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = actx.createOscillator(), g = actx.createGain(), n = actx.currentTime + (o.delay || 0);
+    osc.type = type; osc.frequency.setValueAtTime(f, n);
+    if (o.to) osc.frequency.linearRampToValueAtTime(o.to, n + d);
+    const atk = o.atk || .01;
+    g.gain.setValueAtTime(.0001, n); g.gain.linearRampToValueAtTime(vol, n + atk);
+    g.gain.setValueAtTime(vol, n + Math.max(atk, d - (o.rel || .2))); g.gain.linearRampToValueAtTime(.0001, n + d);
+    let node = osc;
+    if (o.cut) { const lp = actx.createBiquadFilter(); lp.frequency.value = o.cut; osc.connect(lp); node = lp; }
+    node.connect(g); g.connect(actx.destination); osc.start(n); osc.stop(n + d + .05);
+  } catch (e) {}
+}
+function swell(d, f, vol, delay = 0) {
+  if (!S.som) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const n = actx.currentTime + delay, len = Math.floor(actx.sampleRate * d), buf = actx.createBuffer(1, len, actx.sampleRate), ch = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * i / len);
+    const src = actx.createBufferSource(), lp = actx.createBiquadFilter(), g = actx.createGain();
+    src.buffer = buf; lp.frequency.value = f; g.gain.value = vol;
+    src.connect(lp); lp.connect(g); g.connect(actx.destination); src.start(n);
+  } catch (e) {}
+}
+// Som de abertura de cada cena
+const CINE_SFX = [
+  () => { sfx(73, 2.6, "sawtooth", .12, { atk: .4, rel: .8, cut: 380 }); sfx(110, 2.6, "sawtooth", .06, { atk: .4, rel: .8, cut: 380 }); swell(3, 600, .35); swell(3, 600, .3, 2.5); },
+  () => { noise(.5, 6000, .5, .25); [0, .35, .7].forEach(t => sfx(853, .25, "sine", .05, { delay: .6 + t })); [0, .35, .7].forEach(t => sfx(960, .25, "sine", .05, { delay: .6 + t })); },
+  () => { noise(1.4, 220, .8, .9); sfx(45, 1.2, "sine", .4, { to: 30, rel: 1 }); },
+  () => { [0, .5, 1.1].forEach((t, i) => { sfx(320 - i * 40, .18, "square", .05, { delay: t, cut: 1800 }); noise(.12, 4000, 3, .2); }); sfx(60, 3, "sawtooth", .03, { atk: .8, rel: 1, cut: 200 }); },
+  () => { swell(2.5, 900, .12); },
+  () => { sfx(90, 1.6, "sawtooth", .07, { to: 150, atk: .3, rel: .4, cut: 600 }); setTimeout(() => { noise(.6, 300, .8, .8); sfx(50, .5, "sine", .35, { to: 35 }); }, 1500); },
+];
+// Sons de ambiente que se repetem enquanto a cena está na tela
+function cineAmb(i, dt) {
+  const r = Math.random();
+  if (i === 0 && r < dt * .25) swell(2.4, 500, .25);
+  if (i === 2) {
+    if (r < dt * 3) noise(.05, 3000, 2, .12);
+    if (r < dt * .35) sfx(650, 2.2, "sine", .03, { to: 900, atk: .4, rel: .6 });
+    if (r < dt * .12) noise(1.2, 160, .7, .6);
+  }
+  if (i === 3 && r < dt * .2) { sfx(260, .15, "square", .03, { cut: 1500 }); noise(.1, 4000, 3, .12); }
+  if (i === 4 && r < dt * 4) noise(.04, 2500, 2, .08);
+  if (i === 1 && r < dt * 2) noise(.08, 7000, .5, .05);
+}
 let cineCb = null;
 function playCine(cb) {
-  cineCb = cb; S.cine = { i: 0, shown: 0 }; S.phase = "cine";
+  cineCb = cb; S.cine = { i: -1, shown: 0 }; S.phase = "cine";
+  $("#ccTxt").innerHTML = `<div class="cine-title"><h1>Zona de Quarentena</h1><span>Use fone de ouvido.</span><b>Toque para começar</b></div>`;
   $("#cine").hidden = false;
   $("#ccDots").innerHTML = CINE.map(() => "<i></i>").join("");
   cineDots();
@@ -848,9 +970,10 @@ function cineDots() {
 }
 function cineTap() {
   const c = S.cine; if (!c) return;
+  if (c.i < 0) { musInit(); c.i = 0; c.shown = 0; $("#ccTxt").textContent = ""; cineDots(); setTimeout(CINE_SFX[0], 60); return; }
   const L = CINE[c.i].txt;
   if (c.shown < L.length) { c.shown = L.length; return; }
-  if (c.i < CINE.length - 1) { c.i++; c.shown = 0; beep(200, .05, "triangle", .04); cineDots(); }
+  if (c.i < CINE.length - 1) { c.i++; c.shown = 0; beep(200, .05, "triangle", .04); cineDots(); CINE_SFX[c.i](); }
   else cineEnd();
 }
 function cineEnd() {
@@ -1362,12 +1485,18 @@ function loop(nowMs) {
     $("#scan").style.width = Math.min(100, S.scan.t / st * 100) + "%";
     if (S.scan.t >= st) finishScan();
   } else if (!S.scan) $("#scan").style.width = "0";
-  if (S.cine) {
+  if (S.cine && S.cine.i < 0) gateScene(C, now, null, 1);
+  else if (S.cine) {
     const c = S.cine, L = CINE[c.i].txt;
-    if (c.shown < L.length) c.shown = Math.min(L.length, c.shown + dt * 42);
+    if (c.shown < L.length) {
+      const before = Math.floor(c.shown);
+      c.shown = Math.min(L.length, c.shown + dt * 42);
+      if (Math.floor(c.shown) !== before && before % 2 === 0 && L[before] !== " ") beep(1700 + Math.random() * 300, .012, "square", .012);
+    }
     const txt = L.slice(0, Math.floor(c.shown));
     if ($("#ccTxt").textContent !== txt) $("#ccTxt").textContent = txt;
     CINE[c.i].draw(C, now);
+    cineAmb(c.i, dt);
   }
   if (S.phase === "gate" && S.g) {
     const g = S.g, L = gateLine();
