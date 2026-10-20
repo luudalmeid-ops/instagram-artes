@@ -339,6 +339,14 @@ html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 .ficha li.row { gap: 6px; }
 .scene { background: linear-gradient(#0c1222 50%, #22251f 50%); }
 @media (max-width: 400px) { .exam { grid-template-columns: 1fr; } }
+.atk {
+  position: fixed; inset: 0; z-index: 24; background: rgba(4,5,4,.9); display: grid; place-items: center;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  animation: atkIn .15s ease-out;
+}
+.atk canvas { width: 100%; max-width: 640px; height: auto; aspect-ratio: 128 / 72; border-radius: 4px; }
+.atk.shake canvas { animation: flinch .2s infinite; }
+@keyframes atkIn { from { opacity: 0; } }
 .cine-title { display: flex; flex-direction: column; gap: 10px; }
 .cine-title h1 { margin: 0; font-family: var(--f-display); font-size: clamp(28px, 8vw, 40px); letter-spacing: .04em; text-transform: uppercase; color: var(--fg); }
 .cine-title span { font-size: 14px; color: var(--muted); }
@@ -414,6 +422,7 @@ html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 </div>
 <div id="ov" class="ov" hidden><div id="ovCard" class="card"></div></div>
 <div id="toast" class="toast" hidden></div>
+<div id="atk" class="atk" hidden><canvas id="ak" width="128" height="72"></canvas></div>
 <canvas id="splat" width="120" height="220"></canvas>
 <div id="flash"></div>
 
@@ -841,18 +850,19 @@ function person(K0, p, x0, b0, t, walking, sc = 1) {
   if (p.barba) K(x - 3, base - 29, 6, 3, shade(hair, -.1));
   K(x - 2, base - 31, 1, 1, "#111"); K(x + 1, base - 31, 1, 1, "#111");
 }
-function gateScene(K, t, p, walk) {
+function gateScene(K, t, p, walk, o = {}) {
   sky(K, "#0c1222", "#121a2c");
   skyline(K, t, 46, "#0a0e18", false);
   for (let y = 46; y < 72; y++) K(0, y, 128, 1, y < 50 ? "#1a1d1a" : "#22251f");
   for (let i = 0; i < 6; i++) K(20 + i * 18, 60 + (i % 2) * 5, 9, 1, "#31394a");
   for (let y = 10; y < 72; y++) { const half = (y - 10) * .55; K(Math.round(64 - half), y, Math.round(half * 2), 1, "rgba(255,226,140,.07)"); }
-  if (p) person(K, p, Math.round(64 + (1 - walk) * 90), 89 + (walk < 1 ? Math.floor(t * 8) % 2 : 0), t, walk < 1, 2);
+  if (p) person(K, p, Math.round(64 + (1 - walk) * 90) + (o.dx || 0), 89 + (walk < 1 ? Math.floor(t * 8) % 2 : 0) + (o.db || 0), t, walk < 1, 2);
+  if (o.mid) o.mid(K);
   containers(K, 0, 26, 66, 6); containers(K, 102, 26, 66, 6);
   K(26, 12, 3, 56, "#555b52"); K(99, 12, 3, 56, "#555b52"); K(26, 12, 76, 2, "#555b52"); K(26, 66, 76, 2, "#4a4f47");
   for (let y = 15; y < 66; y += 4) for (let x = 29; x < 99; x += 4) K(x + (y / 4 % 2 ? 2 : 0), y, 1, 1, "rgba(160,170,160,.45)");
   for (let x = 26; x < 102; x += 2) K(x, 9 + (x % 4 ? 1 : 0), 1, 2, "#6b706a");
-  if (p && walk >= 1) { const sk = p.pele, j = Math.sin(t * 20) > .7 ? 1 : 0; K(48, 40 + j, 5, 4, sk); K(75, 40 - j, 5, 4, sk); K(48, 41 + j, 5, 1, shade(sk, -.25)); K(75, 41 - j, 5, 1, shade(sk, -.25)); }
+  if (p && walk >= 1 && !o.noHands) { const sk = p.pele, j = Math.sin(t * 20) > .7 ? 1 : 0; K(48, 40 + j, 5, 4, sk); K(75, 40 - j, 5, 4, sk); K(48, 41 + j, 5, 1, shade(sk, -.25)); K(75, 41 - j, 5, 1, shade(sk, -.25)); }
   K(60, 4, 9, 4, "#3a3f38"); K(61, 8, 7, 1, "#ffe38c");
   rain(K, t, 70, "rgba(150,170,210,.45)");
 }
@@ -1328,6 +1338,47 @@ function zombieGroan() {
   [0, .35, .8].forEach((d, i) => sfx(78 - i * 9, 1.3, "sawtooth", .13, { delay: d, to: 52 - i * 6, atk: .15, rel: .6, cut: 420 }));
   noise(1.6, 350, .7, .5);
 }
+function zombie(K0, x0, b0, t, dir, lean, sc = 2) {
+  const K = (X, Y, w, h, c) => K0(x0 + X * sc, b0 + Y * sc, w * sc, h * sc, c);
+  const sk = "#7d9470", skD = "#5c704f", roupa = "#3d3a33", calca = "#26262c", step = Math.floor(t * 5) % 2;
+  K(-3, -12, 2, 12 - step, calca); K(1, -12, 2, 11 + step, calca);
+  K(-4, -24, 8, 12, roupa); K(-4, -24, 8, 1, "#4d493f");
+  K(-2, -19, 2, 2, "#5a1a1a"); K(1, -16, 2, 3, skD); K(-3, -14, 1, 2, "#5a1a1a");
+  if (dir > 0) { K(4, -22, 10, 2, roupa); K(14, -22, 2, 2, sk); K(4, -19, 8, 2, roupa); K(12, -19, 2, 2, sk); }
+  else { K(-14, -22, 10, 2, roupa); K(-16, -22, 2, 2, sk); K(-12, -19, 8, 2, roupa); K(-14, -19, 2, 2, sk); }
+  const hx = -3 + lean * dir;
+  K(-1, -26, 2, 2, skD);
+  K(hx, -34, 6, 8, sk); K(dir > 0 ? hx : hx + 4, -33, 2, 6, skD);
+  K(hx + 1, -35, 2, 1, "#2a2a22"); K(hx + 4, -35, 1, 1, "#2a2a22");
+  const ex = dir > 0 ? hx + 2 : hx + 1;
+  K(ex, -31, 1, 1, "#e8d040"); K(ex + 2, -31, 1, 1, "#e8d040");
+  K(ex, -28, 3, 2, "#2a0505"); K(ex + 1, -26, 1, 2, "#8e1010");
+}
+const akx = $("#ak").getContext("2d"), AK = painter(akx);
+function drawAttack(T, now) {
+  const p = S.atk.p, r = rng(p.seed + 7);
+  const grab = T > 1.25, drag = Math.max(0, T - 2.1);
+  const shake = T < 2.1 && T > .1 ? (Math.sin(now * 55) > 0 ? 1 : -1) : 0;
+  const db = Math.round(drag * 34);
+  gateScene(AK, now, p, 1, { dx: shake, db, noHands: T > 1.1, mid: K => {
+    if (T < 2.1) K(62 + shake, 89 + db - 58, 4, 4, "#2a0505");
+    const zl = Math.min(42, -24 + T * 56), zr = Math.max(86, 152 - T * 56);
+    const zb = 91 + (grab ? db : 0);
+    zombie(K, Math.round(zl), zb, now, 1, grab ? 3 : 0);
+    zombie(K, Math.round(zr), zb - 1, now + .4, -1, grab ? 2 : 0);
+    if (grab) {
+      const dt = T - 1.3;
+      for (let i = 0; i < 30; i++) {
+        const vx = (r() - .5) * 70, vy = -20 - r() * 45, d = Math.max(0, dt - r() * .4);
+        if (d <= 0 || d > 1.3) continue;
+        K(Math.round(62 + vx * d), Math.round(36 + db + vy * d + 70 * d * d), 2, 2, r() < .5 ? "#8e0f12" : "#b3222a");
+      }
+      K(56 + shake, 36 + db, 10, 6, "#7e0d0d");
+    }
+    if (drag > 0) { const w = Math.round(Math.min(1, drag * 1.4) * 56); K(64 - w / 2, 62, w, 4, "#5e0707"); K(64 - w / 3, 61, w * 2 / 3, 1, "#7e0d0d"); }
+  } });
+  if (T > 2.7) { akx.globalAlpha = Math.min(1, (T - 2.7) / .5); AK(0, 0, 128, 72, "#040504"); akx.globalAlpha = 1; }
+}
 // Saudável no limite: entra em pânico, grita e atrai zumbis para o portão.
 function panic() {
   const p = S.cur;
@@ -1335,10 +1386,18 @@ function panic() {
   $("#pFala").textContent = "“SOCORRO! ME TIRA DAQUI!”";
   $(".portrait-wrap").classList.add("lunge");
   sfx(620, .9, "sawtooth", .08, { to: 900, atk: .05, rel: .4, cut: 2600 }); noise(.8, 2200, 2, .25);
-  setTimeout(() => zombieGroan(), 700);
+  musDuck(4);
   setTimeout(() => {
     $(".portrait-wrap").classList.remove("lunge");
-    musDuck(2.5); noise(.5, 1200, 1, .7); splatter(true); flashShake();
+    S.atk = { p, t0: performance.now() / 1000 };
+    $("#atk").hidden = false; $("#atk").classList.add("shake");
+    sfx(700, 1.1, "sawtooth", .07, { to: 1000, atk: .05, rel: .5, cut: 2800 });
+  }, 500);
+  setTimeout(() => zombieGroan(), 900);
+  setTimeout(() => { noise(.4, 900, 1.2, .9); sfx(90, .3, "sine", .3, { to: 50 }); splatter(true); flashShake(); sfx(900, .6, "sawtooth", .06, { to: 400, rel: .3, cut: 2400 }); }, 500 + 1300);
+  setTimeout(() => { $("#atk").classList.remove("shake"); zombieGroan(); }, 500 + 2100);
+  setTimeout(() => {
+    $("#atk").hidden = true; S.atk = null;
     p.shot = true; p.fall = 0; cv.classList.add("gone");
     const t0 = performance.now();
     (function fall(now) { p.fall = Math.min(16, (now - t0) / 40); if (p.fall < 16) requestAnimationFrame(fall); })(t0);
@@ -1347,11 +1406,11 @@ function panic() {
     S.score = Math.max(0, S.score - 100); S.streak = 0; S.dia.mortos++;
     toast(`${p.nome} entrou em pânico, gritou e atraiu os zumbis. Muro −8.` + (p.role ? ` A base perdeu ${artigo(p)} ${p.oficio}.` : ""), "bad");
     renderHUD();
-  }, 1500);
+  }, 500 + 3300);
   setTimeout(() => {
     if (S.base.muro <= 0) return gameOver("muro");
     S.idx++; nextPerson();
-  }, 3300);
+  }, 500 + 3300 + 1800);
 }
 function startLunge() {
   S.phase = "lunge"; S.lungeT = Math.max(1.1, 1.7 - S.day * .1);
@@ -1519,6 +1578,7 @@ function loop(nowMs) {
     $("#scan").style.width = Math.min(100, S.scan.t / st * 100) + "%";
     if (S.scan.t >= st) finishScan();
   } else if (!S.scan) $("#scan").style.width = "0";
+  if (S.atk) drawAttack(now - S.atk.t0, now);
   if (S.cine && S.cine.i < 0) gateScene(C, now, null, 1);
   else if (S.cine) {
     const c = S.cine, L = CINE[c.i].txt;
