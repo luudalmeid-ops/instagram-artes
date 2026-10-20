@@ -63,6 +63,28 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
 .val.warn { color: var(--danger); }
 .strikes { color: var(--danger); letter-spacing: 2px; }
 
+.base { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.base-item { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 5px 6px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.base-item.pulse { animation: basePulse .6s; }
+@keyframes basePulse { 30% { border-color: var(--safe); background: var(--panel-2); } }
+.base-item.hurt { animation: baseHurt .6s; }
+@keyframes baseHurt { 30% { border-color: var(--danger); background: #3a1f1b; } }
+.base-top { display: flex; justify-content: space-between; gap: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.base-top b { font-family: var(--f-data); font-weight: 400; font-size: 15px; color: var(--fg); letter-spacing: 0; line-height: .8; }
+.base-sub { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.meter { height: 5px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--safe); transition: width .5s; }
+.meter i.mid { background: var(--accent); } .meter i.low { background: var(--danger); }
+.chip { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 10px; background: var(--panel-2); color: var(--muted); align-self: flex-start; }
+.chip.on { background: #3a3220; color: var(--accent); }
+.report { display: flex; flex-direction: column; gap: 6px; }
+.report .r { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; background: var(--panel-2); border-radius: 5px; padding: 7px 10px; font-size: 14px; }
+.report .r b { font-family: var(--f-data); font-weight: 400; font-size: 20px; }
+.report .r .d { font-family: var(--f-data); font-size: 18px; min-width: 3.2em; text-align: right; }
+.report .r .d.neg { color: var(--danger); } .report .r .d.pos { color: var(--safe); }
+.report small { color: var(--muted); font-size: 11px; display: block; }
+.evento { border-left: 3px solid var(--danger); padding: 6px 10px; background: #2c1d19; border-radius: 0 5px 5px 0; font-size: 14px; line-height: 1.4; }
+#app.blackout canvas { filter: brightness(.45) contrast(1.2); }
 .booth {
   display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: start;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px;
@@ -260,6 +282,7 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
     <div class="hud-item"><span class="lbl">Pontos</span><span id="hPts" class="val">0</span></div>
     <div class="hud-item"><span class="lbl">Erros</span><span id="hErros" class="val strikes">□□□</span></div>
   </header>
+  <div id="base" class="base"></div>
 
   <section id="gate" hidden>
     <div class="scene"><canvas id="gv" width="128" height="72"></canvas><span class="tag">Portão Leste · Zona 7</span></div>
@@ -280,6 +303,7 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
     <div class="ident">
       <div id="pNome" class="nome">Posto 7 — Portão Leste</div>
       <div id="pInfo" class="info">Aguardando a fila</div>
+      <span id="pRole" class="chip" hidden></span>
       <div class="agit">Agitação <span><i id="agit"></i></span></div>
       <p id="pFala" class="fala">Próximo!</p>
     </div>
@@ -365,7 +389,19 @@ const SCAN_T = 0.9;
 const NOMES_F = ["Ana", "Bruna", "Carla", "Dandara", "Elisa", "Fernanda", "Graça", "Helena", "Iara", "Joana", "Kátia", "Luana", "Marta", "Neide", "Olívia", "Priscila", "Rita", "Sônia", "Tereza", "Vitória"];
 const NOMES_M = ["André", "Bento", "Caio", "Davi", "Edson", "Fábio", "Gilberto", "Hugo", "Igor", "Jorge", "Luiz", "Márcio", "Nelson", "Otávio", "Paulo", "Raimundo", "Sérgio", "Tiago", "Valter", "Wesley"];
 const SOBRENOMES = ["Silva", "Souza", "Oliveira", "Santos", "Lima", "Pereira", "Costa", "Rocha", "Almeida", "Barbosa", "Ferreira", "Nunes", "Moura", "Cardoso", "Teixeira", "Ramos"];
-const OFICIOS = ["enfermeira", "pedreiro", "professora", "motorista", "cozinheiro", "estudante", "agricultora", "mecânico", "costureira", "vendedor", "eletricista", "aposentada"];
+const PROFS = [
+  ["ferreiro", "ferreira", "muro"], ["soldador", "soldadora", "muro"],
+  ["agricultor", "agricultora", "comida"], ["cozinheiro", "cozinheira", "comida"],
+  ["médico", "médica", "saude"], ["enfermeiro", "enfermeira", "saude"],
+  ["eletricista", "eletricista", "energia"], ["mecânico", "mecânica", "energia"],
+];
+const COMUNS = [["professor", "professora"], ["motorista", "motorista"], ["estudante", "estudante"], ["vendedor", "vendedora"], ["costureiro", "costureira"], ["cantor", "cantora"]];
+const BASE = {
+  muro:    { nome: "Muro",    func: "Mantém o muro e o portão de pé", queda: d => 12 + d * 2, prod: 7 },
+  comida:  { nome: "Comida",  func: "Planta e cozinha para a zona",   queda: () => 8 + Math.floor(S.pop / 2), prod: 6 },
+  saude:   { nome: "Saúde",   func: "Cuida dos doentes e feridos",    queda: () => 8, prod: 5 },
+  energia: { nome: "Energia", func: "Mantém geradores e refletores",  queda: () => 9, prod: 6 },
+};
 const ORIGENS = ["Setor Norte", "Vila Industrial", "Bairro do Porto", "Rodovia 116", "Centro antigo", "Zona rural", "Hospital Regional", "Estação de trem"];
 const FALAS = [
   "Andei três dias até chegar aqui.", "Minha filha já passou pelo portão ontem.", "Pode examinar, não tenho nada.",
@@ -396,7 +432,11 @@ function makePerson(day) {
   const p = {
     seed: RI(1, 1e9), infected, signs, fem, idade,
     nome: `${pick(fem ? NOMES_F : NOMES_M)} ${pick(SOBRENOMES)}`,
-    oficio: idade > 64 ? (fem ? "aposentada" : "aposentado") : pick(OFICIOS),
+    ...(() => {
+      if (idade > 64 && chance(.6)) return { oficio: fem ? "aposentada" : "aposentado", role: null };
+      if (chance(.55)) { const r = pick(PROFS); return { oficio: r[fem ? 1 : 0], role: r[2] }; }
+      const c = pick(COMUNS); return { oficio: c[fem ? 1 : 0], role: null };
+    })(),
     origem: pick(ORIGENS), fala: pick(FALAS),
     pele: pick(PELES), cabelo: idade > 60 && chance(.6) ? "#b9b6ae" : pick(CABELOS),
     roupa: pick(ROUPAS), iris: pick(IRIS),
@@ -601,6 +641,11 @@ function pitchFor(p) {
     () => [`Me chamo ${eu}. Minha irmã entrou na semana passada.`, "Pergunta por ela lá dentro. Ela vai dizer que eu sou de confiança."],
     () => ["Por favor, por favor... eles estão vindo pela rodovia.", "Ouvi gritos a noite inteira. Eu não aguento mais uma noite lá fora."],
     () => [`Vim andando de ${p.origem} até aqui.`, "Disseram no rádio que a Zona 7 ainda aceita gente. É verdade, né?"],
+  ];
+  if (p.role && chance(.6)) return [
+    `Eu sou ${p.oficio}! Vocês vão precisar de mim aí dentro.`,
+    { muro: "Esse portão tá enferrujando. Eu conserto isso em dois dias.", comida: "Eu sei plantar em qualquer chão. Ninguém passa fome comigo.",
+      saude: "Quantos doentes vocês têm aí? Eu posso cuidar deles.", energia: "Seus refletores tão piscando. É o gerador. Eu resolvo." }[p.role],
   ];
   return pick(arq)();
 }
@@ -991,7 +1036,9 @@ function dayConfig(d) {
 }
 
 function startGame() {
-  Object.assign(S, { day: 1, score: 0, strikes: 0, streak: 0 });
+  Object.assign(S, { day: 1, score: 0, strikes: 0, streak: 0, pop: 0, blackout: false,
+    base: { muro: 70, comida: 65, saude: 60, energia: 60 }, workers: { muro: 1, comida: 1, saude: 1, energia: 1 } });
+  renderBase();
   if (S.seenCine) dayIntro();
   else { S.queue = []; S.idx = 0; S.cur = null; renderHUD(); playCine(dayIntro); }
 }
@@ -1001,13 +1048,16 @@ function dayIntro() {
   S.idx = 0; S.cur = null; S.time = cfg.time; S.phase = "intro"; S.view = null;
   S.dia = { salvos: 0, eliminados: 0, acertos: 0, erros: 0 };
   const novos = TOOLS.filter(t => t.dia === S.day);
+  $("#app").classList.toggle("blackout", !!S.blackout);
+  const alerta = S.blackout ? `<div class="evento">Apagão: os exames demoram o dobro hoje.</div>` : "";
   const intro = S.day === 1
     ? `<p>Cada sobrevivente vai tentar te convencer no portão. Ouça, pergunte o que quiser e leve para a triagem. Lá você examina e decide: <b>salvar</b> quem está saudável, <b>eliminar</b> quem tem sinal de Febre Âmbar.</p>
        <p>A conversa pode dar pistas, mas só o exame confirma. Deixar um infectado entrar acaba com a zona: fim de jogo na hora. Eliminar um inocente conta como erro. Com 3 erros, você é afastado.</p>`
     : novos.length ? `<p>Chegou equipamento novo: <b>${novos.map(t => t.nome).join(", ")}</b>. A fila também está maior.</p>`
     : `<p>A infecção está mais difícil de ver. Mais gente na fila e menos tempo de turno.</p>`;
   openOv(`<span class="eyebrow">Dia ${S.day} · ${cfg.n} na fila · turno de ${fmtTime(cfg.time)}</span>
-    <h2>${S.day === 1 ? "Primeiro turno" : "Dia " + S.day}</h2>${intro}
+    <h2>${S.day === 1 ? "Primeiro turno" : "Dia " + S.day}</h2>${intro}${alerta}
+    ${S.day === 1 ? `<p>A zona depende de quem você deixa entrar. Ferreiros mantêm o muro, agricultores a comida, médicos a saúde, eletricistas a energia. Se o <b>muro</b> chegar a zero, a horda entra.</p>` : ""}
     ${rulesHTML()}
     <button class="btn main" id="go" type="button">Abrir o portão</button>`);
   $("#go").onclick = () => { closeOv(); S.phase = "play"; beep(440, .1); beep(660, .12); nextPerson(); };
@@ -1024,6 +1074,9 @@ function nextPerson() {
   S.checked = {}; S.view = null; S.scan = null;
   $("#pNome").textContent = p.nome;
   $("#pInfo").textContent = `${p.idade} anos · ${p.oficio} · veio de ${p.origem}`;
+  $("#pRole").hidden = false;
+  $("#pRole").className = "chip" + (p.role ? " on" : "");
+  $("#pRole").textContent = p.role ? `${BASE[p.role].nome}: ${BASE[p.role].func.toLowerCase()}` : "Sem função na base";
   $("#pFala").textContent = `“${p.fala}”`;
   renderTools(); renderFicha(); renderHUD();
   gateStart(p);
@@ -1081,26 +1134,71 @@ function verdict(save, p, reflex) {
   if (!save && !p.infected) {
     S.strikes++; S.streak = 0; S.score = Math.max(0, S.score - 150); S.dia.erros++; S.dia.eliminados++;
     beep(220, .3, "sawtooth", .06, -60);
-    toast(`${p.nome} estava saudável. ${distractorTxt(p)}`, "bad");
+    toast(`${p.nome} estava saudável. ${distractorTxt(p)}` + (p.role ? ` A base perdeu ${artigo(p)} ${p.oficio}.` : ""), "bad");
+    if (p.role) hurtBase(p.role);
     renderHUD();
     if (S.strikes >= 3) return setTimeout(() => gameOver("inocentes", p), 1300);
     return setTimeout(() => { S.idx++; nextPerson(); }, 1300);
   }
-  if (!save && !p.infected) {
-    S.strikes++; S.streak = 0; S.score = Math.max(0, S.score - 150); S.dia.erros++; S.dia.eliminados++;
-    beep(220, .3, "sawtooth", .06, -60);
-    toast(`${p.nome} estava saudável. ${distractorTxt(p)}`, "bad");
-    if (S.strikes >= 3) return setTimeout(() => gameOver("inocentes", p), 1100);
-  } else {
+  {
     const bonus = Math.min(S.streak * 20, 200);
     S.score += 100 + bonus; S.streak++; S.dia.acertos++;
     save ? S.dia.salvos++ : S.dia.eliminados++;
+    if (save) admit(p);
     if (save) { beep(660, .09); beep(990, .12, "square", .04); }
     if (reflex) S.score += 50;
-    toast(save ? `Liberado. +${100 + bonus}` : reflex ? `Reflexo! Era infectado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${150 + bonus}` : `Infectado confirmado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${100 + bonus}`, "ok");
+    toast(save ? (p.role ? `${p.nome} vai reforçar ${BASE[p.role].nome.toLowerCase()}. +${100 + bonus}` : `Liberado. +${100 + bonus}`) : reflex ? `Reflexo! Era infectado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${150 + bonus}` : `Infectado confirmado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${100 + bonus}`, "ok");
   }
   renderHUD();
   setTimeout(() => { S.idx++; nextPerson(); }, save ? 1000 : 1400);
+}
+function artigo(p) { return p.fem ? "uma" : "um"; }
+function admit(p) {
+  S.pop++;
+  if (p.role) { S.workers[p.role]++; renderBase(); flashBase(p.role, "pulse"); }
+}
+function hurtBase(role) { flashBase(role, "hurt"); }
+function flashBase(role, cls) {
+  const el = document.querySelector(`.base-item[data-r="${role}"]`); if (!el) return;
+  el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+}
+function renderBase() {
+  const box = $("#base"); if (!S.base) return;
+  box.innerHTML = Object.keys(BASE).map(k => {
+    const v = Math.max(0, Math.round(S.base[k]));
+    return `<div class="base-item" data-r="${k}" title="${BASE[k].func}"><div class="base-top">${BASE[k].nome}<b>${v}</b></div>
+      <div class="meter"><i class="${v < 25 ? "low" : v < 50 ? "mid" : ""}" style="width:${v}%"></i></div>
+      <div class="base-sub">${S.workers[k]} ${S.workers[k] === 1 ? "pessoa" : "pessoas"}</div></div>`;
+  }).join("");
+}
+// Fecha o dia: produção dos trabalhadores menos o desgaste. Recursos zerados têm consequência.
+function runBase() {
+  const rows = [], eventos = [];
+  for (const k in BASE) {
+    const antes = S.base[k], q = BASE[k].queda(S.day), p = S.workers[k] * BASE[k].prod;
+    S.base[k] = Math.max(0, Math.min(100, antes + p - q));
+    rows.push({ k, antes, depois: S.base[k], q, p });
+  }
+  const perde = (n, motivo) => {
+    for (let i = 0; i < n; i++) {
+      const vivos = Object.keys(S.workers).filter(k => S.workers[k] > 0);
+      if (!vivos.length) break;
+      const k = pick(vivos); S.workers[k]--;
+      eventos.push(`${motivo}: a base perdeu um trabalhador de ${BASE[k].nome.toLowerCase()}.`);
+    }
+  };
+  if (S.base.comida <= 0) { perde(2, "Fome"); S.pop = Math.max(0, S.pop - 3); S.base.saude = Math.max(0, S.base.saude - 15); eventos.push("Sem comida, três moradores foram embora e a saúde da zona piorou."); }
+  if (S.base.saude <= 0) perde(1, "Uma doença se espalhou");
+  S.blackout = S.base.energia <= 0;
+  if (S.blackout) eventos.push("Sem energia: os refletores apagaram. Amanhã os exames vão demorar o dobro no escuro.");
+  for (const r of rows) if (r.depois > 0 && r.depois < 25) eventos.push(`${BASE[r.k].nome} está em ${Math.round(r.depois)}. Precisa de ${({ muro: "ferreiro ou soldador", comida: "agricultor ou cozinheiro", saude: "médico ou enfermeiro", energia: "eletricista ou mecânico" })[r.k]}.`);
+  renderBase();
+  const html = `<div class="report">${rows.map(r => {
+    const d = Math.round(r.depois - r.antes);
+    return `<div class="r"><span>${BASE[r.k].nome}<small>${S.workers[r.k]} trab. produzem +${r.p} · desgaste −${r.q}</small></span>
+      <span class="d ${d < 0 ? "neg" : d > 0 ? "pos" : ""}">${d > 0 ? "+" : ""}${d}</span><b>${Math.round(r.depois)}</b></div>`;
+  }).join("")}</div>${eventos.map(e => `<div class="evento">${e}</div>`).join("")}`;
+  return { html, muroCaiu: S.base.muro <= 0 };
 }
 function startLunge() {
   S.phase = "lunge"; S.lungeT = Math.max(1.1, 1.7 - S.day * .1);
@@ -1127,6 +1225,7 @@ function endDay(timeout) {
   const bonus = timeout ? 0 : Math.floor(S.time) * 2;
   S.score += bonus; saveBest(); renderHUD();
   beep(523, .1); beep(784, .15);
+  const rep = runBase();
   openOv(`<span class="eyebrow">Fim do turno</span>
     <h2>Dia ${S.day} concluído</h2>
     ${timeout ? `<p>O turno acabou com ${left} ${left === 1 ? "pessoa" : "pessoas"} ainda na fila. Elas voltaram para a estrada.</p>` : `<p>Fila zerada antes do fim do turno. Bônus de tempo: +${bonus}.</p>`}
@@ -1136,19 +1235,23 @@ function endDay(timeout) {
       <div><b>${S.dia.acertos}</b><span>Acertos</span></div>
       <div><b>${S.strikes}/3</b><span>Erros no total</span></div>
     </div>
+    <span class="eyebrow">Relatório da base · ${S.pop} acolhidos até agora</span>
+    ${rep.html}
     <p>Pontuação: <b>${S.score}</b></p>
-    <button class="btn main" id="go" type="button">Começar dia ${S.day + 1}</button>`);
-  $("#go").onclick = () => { S.day++; dayIntro(); };
+    <button class="btn main" id="go" type="button">${rep.muroCaiu ? "Ver o que aconteceu" : "Começar dia " + (S.day + 1)}</button>`);
+  $("#go").onclick = rep.muroCaiu ? () => gameOver("muro") : () => { S.day++; dayIntro(); };
 }
 function gameOver(kind, p) {
   S.phase = "over"; saveBest(); renderHUD();
-  const txt = kind === "mordido"
+  const txt = kind === "muro"
+    ? `<h2 class="bad">O muro caiu</h2><p>Sem ninguém para soldar e reforçar, o portão cedeu durante a noite. A horda entrou na Zona 7. Salvar ferreiros e soldadores é o que mantém o muro de pé.</p>`
+    : kind === "mordido"
     ? `<h2 class="bad">Você foi mordido</h2><p>${p.nome} avançou antes que você reagisse. Tinha ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. Quanto mais você demora com um infectado, mais agitado ele fica.</p>`
     : kind === "infectado"
     ? `<h2 class="bad">A zona foi contaminada</h2><p>Você liberou ${p.nome}, que tinha ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. A infecção se espalhou dentro dos muros.</p>`
     : `<h2 class="bad">Você foi afastado do posto</h2><p>Três sobreviventes saudáveis foram eliminados no seu turno. O comando tirou você do portão.</p>`;
   openOv(`<span class="eyebrow">Fim de jogo · Dia ${S.day}</span>${txt}
-    <div class="stats"><div><b>${S.score}</b><span>Pontos</span></div><div><b>${S.best}</b><span>Recorde</span></div></div>
+    <div class="stats"><div><b>${S.score}</b><span>Pontos</span></div><div><b>${S.best}</b><span>Recorde</span></div><div><b>${S.day}</b><span>Dias</span></div><div><b>${S.pop}</b><span>Acolhidos</span></div></div>
     <button class="btn main" id="go" type="button">Jogar de novo</button>
     <button class="link" id="rever" type="button">Rever a abertura</button>`);
   $("#go").onclick = startGame;
@@ -1209,6 +1312,7 @@ $("#bManual").onclick = () => {
   if (!$("#ov").hidden || (S.phase !== "play" && S.phase !== "scan" && S.phase !== "gate")) return;
   paused = S.phase; S.phase = "paused";
   openOv(`<span class="eyebrow">Manual do fiscal · turno pausado</span><h2>Sinais de infecção</h2>${rulesHTML()}
+    <p>Cada profissão sustenta uma parte da base: muro (ferreiro, soldador), comida (agricultor, cozinheiro), saúde (médico, enfermeiro), energia (eletricista, mecânico). Todo dia o muro e os estoques se desgastam.</p>
     <p>No portão, a conversa pode dar pistas, mas só o exame confirma. Salvar um infectado encerra o jogo. Eliminar um saudável custa 150 pontos e um erro.</p>
     <p class="info">Atalhos no teclado: 1 a 5 para os exames, E para eliminar, S para salvar.</p>
     <button class="btn main" id="go" type="button">Voltar ao portão</button>`);
@@ -1254,8 +1358,9 @@ function loop(nowMs) {
   $("#agit").style.width = Math.min(100, (S.agit || 0) * 100) + "%";
   if (S.scan && S.phase === "scan") {
     S.scan.t += dt;
-    $("#scan").style.width = Math.min(100, S.scan.t / SCAN_T * 100) + "%";
-    if (S.scan.t >= SCAN_T) finishScan();
+    const st = SCAN_T * (S.blackout ? 2 : 1);
+    $("#scan").style.width = Math.min(100, S.scan.t / st * 100) + "%";
+    if (S.scan.t >= st) finishScan();
   } else if (!S.scan) $("#scan").style.width = "0";
   if (S.cine) {
     const c = S.cine, L = CINE[c.i].txt;
