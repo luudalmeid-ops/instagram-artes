@@ -1169,13 +1169,14 @@ function dayIntro() {
   const cfg = dayConfig(S.day);
   S.queue = Array.from({ length: cfg.n }, () => makePerson(S.day));
   S.idx = 0; S.cur = null; S.time = cfg.time; S.phase = "intro"; S.view = null;
-  S.dia = { salvos: 0, eliminados: 0, acertos: 0, erros: 0 };
+  S.dia = { salvos: 0, eliminados: 0, acertos: 0, erros: 0, mortos: 0 };
   const novos = TOOLS.filter(t => t.dia === S.day);
   $("#app").classList.toggle("blackout", !!S.blackout);
   const alerta = S.blackout ? `<div class="evento">Apagão: os exames demoram o dobro hoje.</div>` : "";
   const intro = S.day === 1
     ? `<p>Cada sobrevivente vai tentar te convencer no portão. Ouça, pergunte o que quiser e leve para a triagem. Lá você examina e decide: <b>salvar</b> quem está saudável, <b>eliminar</b> quem tem sinal de Febre Âmbar.</p>
-       <p>A conversa pode dar pistas, mas só o exame confirma. Deixar um infectado entrar acaba com a zona: fim de jogo na hora. Eliminar um inocente conta como erro. Com 3 erros, você é afastado.</p>`
+       <p>A conversa pode dar pistas, mas só o exame confirma. Deixar um infectado entrar acaba com a zona: fim de jogo na hora. Eliminar um inocente conta como erro. Com 3 erros, você é afastado.</p>
+       <p>Não demore. Na fila, todo mundo fica agitado: o infectado ataca, e o saudável entra em pânico, grita e atrai zumbis.</p>`
     : novos.length ? `<p>Chegou equipamento novo: <b>${novos.map(t => t.nome).join(", ")}</b>. A fila também está maior.</p>`
     : `<p>A infecção está mais difícil de ver. Mais gente na fila e menos tempo de turno.</p>`;
   openOv(`<span class="eyebrow">Dia ${S.day} · ${cfg.n} na fila · turno de ${fmtTime(cfg.time)}</span>
@@ -1215,7 +1216,7 @@ function useTool(id) {
 function finishScan() {
   const id = S.scan.id; S.scan = null; S.phase = "play";
   S.checked[id] = true; S.view = id; S.viewAt = performance.now() / 1000;
-  S.agit = Math.min(S.cur.infected ? 1 : .85, S.agit + .07);
+  S.agit = Math.min(.99, S.agit + .07);
   flinch(pick(REACAO[id][S.cur.infected && chance(.6) ? 1 : 0]));
   beep(1320, .06, "sine", .06);
   renderTools(); renderFicha();
@@ -1323,6 +1324,35 @@ function runBase() {
   }).join("")}</div>${eventos.map(e => `<div class="evento">${e}</div>`).join("")}`;
   return { html, muroCaiu: S.base.muro <= 0 };
 }
+function zombieGroan() {
+  [0, .35, .8].forEach((d, i) => sfx(78 - i * 9, 1.3, "sawtooth", .13, { delay: d, to: 52 - i * 6, atk: .15, rel: .6, cut: 420 }));
+  noise(1.6, 350, .7, .5);
+}
+// Saudável no limite: entra em pânico, grita e atrai zumbis para o portão.
+function panic() {
+  const p = S.cur;
+  S.phase = "anim";
+  $("#pFala").textContent = "“SOCORRO! ME TIRA DAQUI!”";
+  $(".portrait-wrap").classList.add("lunge");
+  sfx(620, .9, "sawtooth", .08, { to: 900, atk: .05, rel: .4, cut: 2600 }); noise(.8, 2200, 2, .25);
+  setTimeout(() => zombieGroan(), 700);
+  setTimeout(() => {
+    $(".portrait-wrap").classList.remove("lunge");
+    musDuck(2.5); noise(.5, 1200, 1, .7); splatter(true); flashShake();
+    p.shot = true; p.fall = 0; cv.classList.add("gone");
+    const t0 = performance.now();
+    (function fall(now) { p.fall = Math.min(16, (now - t0) / 40); if (p.fall < 16) requestAnimationFrame(fall); })(t0);
+    const st = $("#stamp"); st.hidden = false; st.className = "stamp bad"; st.textContent = "MORTO";
+    S.base.muro = Math.max(0, S.base.muro - 8); renderBase(); flashBase("muro", "hurt");
+    S.score = Math.max(0, S.score - 100); S.streak = 0; S.dia.mortos++;
+    toast(`${p.nome} entrou em pânico, gritou e atraiu os zumbis. Muro −8.` + (p.role ? ` A base perdeu ${artigo(p)} ${p.oficio}.` : ""), "bad");
+    renderHUD();
+  }, 1500);
+  setTimeout(() => {
+    if (S.base.muro <= 0) return gameOver("muro");
+    S.idx++; nextPerson();
+  }, 3300);
+}
 function startLunge() {
   S.phase = "lunge"; S.lungeT = Math.max(1.1, 1.7 - S.day * .1);
   scream(); flashShake();
@@ -1358,6 +1388,7 @@ function endDay(timeout) {
       <div><b>${S.dia.acertos}</b><span>Acertos</span></div>
       <div><b>${S.strikes}/3</b><span>Erros no total</span></div>
     </div>
+    ${S.dia.mortos ? `<div class="evento">${S.dia.mortos} ${S.dia.mortos === 1 ? "pessoa morreu" : "pessoas morreram"} no portão depois de entrar em pânico.</div>` : ""}
     <span class="eyebrow">Relatório da base · ${S.pop} acolhidos até agora</span>
     ${rep.html}
     <p>Pontuação: <b>${S.score}</b></p>
@@ -1437,6 +1468,7 @@ $("#bManual").onclick = () => {
   openOv(`<span class="eyebrow">Manual do fiscal · turno pausado</span><h2>Sinais de infecção</h2>${rulesHTML()}
     <p>Cada profissão sustenta uma parte da base: muro (ferreiro, soldador), comida (agricultor, cozinheiro), saúde (médico, enfermeiro), energia (eletricista, mecânico). Todo dia o muro e os estoques se desgastam.</p>
     <p>No portão, a conversa pode dar pistas, mas só o exame confirma. Salvar um infectado encerra o jogo. Eliminar um saudável custa 150 pontos e um erro.</p>
+    <p>Agitação no máximo: o infectado ataca (atire rápido) e o saudável grita, atrai zumbis e morre no portão, danificando o muro.</p>
     <p class="info">Atalhos no teclado: 1 a 5 para os exames, E para eliminar, S para salvar.</p>
     <button class="btn main" id="go" type="button">Voltar ao portão</button>`);
   $("#go").onclick = () => { closeOv(); S.phase = paused; paused = null; };
@@ -1469,10 +1501,12 @@ function loop(nowMs) {
   }
   if ((S.phase === "play" || S.phase === "scan") && S.cur) {
     const p = S.cur, prev = S.agit;
-    S.agit = p.infected ? S.agit + dt / Math.max(9, 17 - S.day) : Math.min(.85, S.agit + dt / 30);
+    // Saudáveis e infectados se agitam no mesmo ritmo (com variação por pessoa): esperar não revela nada, só aumenta o risco.
+    p.agitRate = p.agitRate || R(.8, 1.2) / Math.max(9, 17 - S.day);
+    S.agit = Math.min(1, S.agit + dt * p.agitRate);
     if (prev < .5 && S.agit >= .5) flinch(pick(PRESSA[p.infected && chance(.5) ? 1 : 0]));
-    if (prev < .8 && S.agit >= .8) flinch(p.infected ? pick(PRESSA[1]) : "Por favor! Eu tenho família!");
-    if (p.infected && S.agit >= 1 && S.phase === "play") startLunge();
+    if (prev < .8 && S.agit >= .8) flinch(p.infected ? pick(PRESSA[1]) : pick(["Por favor! Eu tenho família!", "Eu não aguento mais esperar!", "(começa a hiperventilar)"]));
+    if (S.agit >= 1 && S.phase === "play") p.infected ? startLunge() : panic();
   }
   if (S.phase === "lunge") {
     S.lungeT -= dt;
