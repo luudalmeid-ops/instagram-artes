@@ -1,4 +1,4 @@
-const CACHE = "zq-v2";
+const CACHE = "zq-v3";
 const FILES = ["./", "index.html", "manifest.json", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {

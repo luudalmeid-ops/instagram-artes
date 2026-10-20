@@ -69,7 +69,36 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
 }
 .portrait-wrap { position: relative; width: 150px; aspect-ratio: 1; max-width: 100%; }
 #cv { width: 100%; height: 100%; border-radius: 3px; transition: filter .4s; }
-#cv.gone { filter: grayscale(1) brightness(.45); }
+#cv.gone { filter: brightness(.7) saturate(.7); }
+.portrait-wrap.flinch { animation: flinch .3s; }
+.portrait-wrap.lunge { animation: lunge .12s infinite; z-index: 5; }
+.portrait-wrap.lunge #cv { transform: scale(1.18); transition: transform .15s; box-shadow: 0 0 0 3px var(--danger); }
+@keyframes flinch { 25% { transform: translateX(-4px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); } }
+@keyframes lunge { 0% { transform: translate(-3px, 2px); } 50% { transform: translate(3px, -2px); } 100% { transform: translate(-2px, -1px); } }
+.mira {
+  position: absolute; left: 50%; top: 40%; width: 64px; height: 64px; margin: -32px 0 0 -32px; z-index: 6;
+  border: 2px solid #ff3b2f; border-radius: 50%; animation: mira .22s ease-out; pointer-events: none;
+}
+.mira::before, .mira::after { content: ""; position: absolute; background: #ff3b2f; }
+.mira::before { left: 50%; top: -10px; bottom: -10px; width: 2px; margin-left: -1px; }
+.mira::after { top: 50%; left: -10px; right: -10px; height: 2px; margin-top: -1px; }
+@keyframes mira { from { transform: scale(2.4); opacity: 0; } }
+.agit { display: flex; align-items: center; gap: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.agit span { flex: 1; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.agit i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--danger)); }
+#app.shake { animation: shake .35s; }
+@keyframes shake { 20% { transform: translate(-6px, 3px); } 40% { transform: translate(5px, -4px); } 60% { transform: translate(-4px, 2px); } 80% { transform: translate(3px, -1px); } }
+.scene.shake { animation: flinch .25s; }
+#flash { position: fixed; inset: 0; z-index: 26; background: #fff; opacity: 0; pointer-events: none; }
+#flash.on { animation: flash .18s ease-out; }
+@keyframes flash { from { opacity: .85; } to { opacity: 0; } }
+#splat {
+  position: fixed; inset: 0; width: 100%; height: 100%; z-index: 25; pointer-events: none;
+  opacity: 0; transition: opacity 1.4s ease-in;
+}
+#splat.on { opacity: .92; transition: none; }
+.btn.danger.fire { animation: fire .3s infinite alternate; font-size: 20px; }
+@keyframes fire { to { background: #ff3b2f; transform: scale(1.04); } }
 .stamp {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-12deg);
   font-family: var(--f-display); font-weight: 700; font-size: 19px; letter-spacing: .06em;
@@ -237,7 +266,7 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
     <div id="dlg" class="dlg">
       <span id="dlgWho" class="who">Sobrevivente no portão</span>
       <div id="dlgTxt" class="txt"></div>
-      <span id="dlgHint" class="hint">toque para continuar ▸</span>
+      <span id="dlgHint" class="hint">toque para pular ▸</span>
     </div>
     <div id="choices" class="choices"></div>
   </section>
@@ -251,6 +280,7 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
     <div class="ident">
       <div id="pNome" class="nome">Posto 7 — Portão Leste</div>
       <div id="pInfo" class="info">Aguardando a fila</div>
+      <div class="agit">Agitação <span><i id="agit"></i></span></div>
       <p id="pFala" class="fala">Próximo!</p>
     </div>
   </section>
@@ -287,6 +317,8 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
 </div>
 <div id="ov" class="ov" hidden><div id="ovCard" class="card"></div></div>
 <div id="toast" class="toast" hidden></div>
+<canvas id="splat" width="120" height="220"></canvas>
+<div id="flash"></div>
 
 <script>
 (() => {
@@ -400,7 +432,12 @@ function drawPortrait(p, t) {
   }
   const bob = Math.sin(t * 2 + p.seed) > .6 ? 1 : 0;
   const sk = p.pele, skD = shade(sk, -.18), hair = p.cabelo;
-  const o = bob;
+  const o = bob + Math.floor(p.fall || 0);
+  if (p.shot) {
+    const r = rng(p.seed + 99);
+    for (let i = 0; i < 26; i++) { const a = r() * 6.28, d = r() * 14; P(Math.round(26 + Math.cos(a) * d), Math.round(16 + Math.sin(a) * d * .8), 1 + (r() * 2 | 0), 1 + (r() * 2 | 0), r() < .5 ? "#7e0d0d" : "#a3161a"); }
+    for (let i = 0; i < 5; i++) { const x = 18 + (r() * 16 | 0), y = 14 + (r() * 8 | 0); P(x, y, 1, Math.min(14, Math.floor((p.fall || 0) * .8) + 2), "#7e0d0d"); }
+  }
   // corpo
   P(8, 38 + o, 32, 10, p.roupa); P(7, 40 + o, 34, 8, p.roupa);
   P(8, 38 + o, 32, 1, shade(p.roupa, .15));
@@ -438,6 +475,17 @@ function drawPortrait(p, t) {
   if (p.barba) { const b = shade(hair, -.1); P(16, 26 + o, 16, 5, b); P(18, 31 + o, 12, 1, b); P(21, 27 + o, 6, 1, shade(sk, -.35)); }
   else P(21, 27 + o, 6, 1, shade(sk, -.35));
   if (p.idade > 55) { P(17, 23 + o, 2, 1, skD); P(29, 23 + o, 2, 1, skD); }
+  if (p === S.cur && S.phase === "lunge") {
+    P(18, 20 + o, 4, 2, "#e8d040"); P(26, 20 + o, 4, 2, "#e8d040"); P(20, 20 + o, 1, 2, "#300"); P(28, 20 + o, 1, 2, "#300");
+    P(17, 18 + o, 5, 1, "#2a1010"); P(26, 18 + o, 5, 1, "#2a1010");
+    P(20, 26 + o, 8, 4, "#3a0808"); P(21, 26 + o, 1, 1, "#e9e5d3"); P(26, 26 + o, 1, 1, "#e9e5d3");
+    for (let i = 0; i < 4; i++) P(16 + i * 5, 28 + o + (i % 2), 1, 4, "#4a2a52");
+  }
+  if (p.shot) {
+    P(23, 15 + o, 3, 3, "#5a0606"); P(24, 16 + o, 1, 1, "#1a0000");
+    P(22, 18 + o, 1, 5, "#8e1010"); P(25, 18 + o, 1, 8, "#8e1010");
+    P(14, 40 + o, 20, 6, "rgba(120,10,12,.75)");
+  }
 }
 
 const ex = $("#ex"), ec = ex.getContext("2d"), E = painter(ec);
@@ -572,23 +620,30 @@ const PERGUNTAS = { mordida: "Você foi mordido?", sentindo: "Como você está s
 
 function gateStart(p) {
   S.phase = "gate";
-  S.g = { lines: pitchFor(p), li: 0, shown: 0, mode: "fala", asked: {}, walk: 0, me: false };
+  S.g = { lines: pitchFor(p), li: 0, shown: 0, mode: "fala", asked: {}, walk: 0, me: false, wait: 0 };
+  S.agit = 0;
   $("#pFala").textContent = `“${S.g.lines[S.g.lines.length - 1]}”`;
   $("#mesa").hidden = true; $("#gate").hidden = false;
   $("#choices").dataset.key = "";
   renderGate();
+}
+function gateShake() {
+  const L = gateLine();
+  if (!L.includes("!")) return;
+  const sc = $(".scene"); sc.classList.remove("shake"); void sc.offsetWidth; sc.classList.add("shake");
+  noise(.25, 900, 1, .25);
 }
 function gateLine() { return S.g.lines[S.g.li] || ""; }
 function gateTap() {
   if (S.phase !== "gate") return;
   const g = S.g, L = gateLine();
   if (g.shown < L.length) { g.walk = 1; g.shown = L.length; return renderGate(); }
-  if (g.li < g.lines.length - 1) { g.li++; g.shown = 0; beep(300, .03, "square", .02); return renderGate(); }
+  if (g.li < g.lines.length - 1) { g.li++; g.shown = 0; g.wait = 0; beep(300, .03, "square", .02); gateShake(); return renderGate(); }
   if (g.mode !== "menu") { g.mode = "menu"; renderGate(); }
 }
 function gateAsk(k) {
   const g = S.g; g.asked[k] = true; g.mode = "fala"; g.me = true;
-  g.lines = [PERGUNTAS[k], answerFor(S.cur, k)]; g.li = 0; g.shown = 0;
+  g.lines = [PERGUNTAS[k], answerFor(S.cur, k)]; g.li = 0; g.shown = 0; g.wait = 0; g.walk = 1;
   renderGate();
 }
 function toExam() {
@@ -605,10 +660,10 @@ function renderGate() {
   $("#dlgTxt").textContent = L.slice(0, Math.floor(g.shown));
   $("#dlgHint").style.visibility = g.mode === "menu" ? "hidden" : "visible";
   const ch = $("#choices");
-  const key = g.mode + (done ? 1 : 0) + Object.keys(g.asked).join();
+  const key = Object.keys(g.asked).join() || "-";
   if (ch.dataset.key === key) return;
   ch.dataset.key = key; ch.innerHTML = "";
-  if (g.mode === "menu") for (const k in PERGUNTAS) if (!g.asked[k]) {
+  for (const k in PERGUNTAS) if (!g.asked[k]) {
     const b = document.createElement("button"); b.type = "button"; b.className = "opt";
     b.textContent = "Perguntar: “" + PERGUNTAS[k] + "”"; b.onclick = () => gateAsk(k); ch.append(b);
   }
@@ -679,6 +734,7 @@ function gateScene(K, t, p, walk) {
   K(26, 12, 3, 56, "#555b52"); K(99, 12, 3, 56, "#555b52"); K(26, 12, 76, 2, "#555b52"); K(26, 66, 76, 2, "#4a4f47");
   for (let y = 15; y < 66; y += 4) for (let x = 29; x < 99; x += 4) K(x + (y / 4 % 2 ? 2 : 0), y, 1, 1, "rgba(160,170,160,.45)");
   for (let x = 26; x < 102; x += 2) K(x, 9 + (x % 4 ? 1 : 0), 1, 2, "#6b706a");
+  if (p && walk >= 1) { const sk = p.pele, j = Math.sin(t * 20) > .7 ? 1 : 0; K(48, 40 + j, 5, 4, sk); K(75, 40 - j, 5, 4, sk); K(48, 41 + j, 5, 1, shade(sk, -.25)); K(75, 41 - j, 5, 1, shade(sk, -.25)); }
   K(60, 4, 9, 4, "#3a3f38"); K(61, 8, 7, 1, "#ffe38c");
   rain(K, t, 70, "rgba(150,170,210,.45)");
 }
@@ -774,6 +830,64 @@ function beep(f, d = .08, type = "square", vol = .05, slide = 0) {
   } catch (e) {}
 }
 
+function noise(d, f, q, vol) {
+  if (!S.som) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const n = actx.currentTime, len = Math.floor(actx.sampleRate * d), buf = actx.createBuffer(1, len, actx.sampleRate), ch = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    const src = actx.createBufferSource(), bp = actx.createBiquadFilter(), g = actx.createGain();
+    src.buffer = buf; bp.type = "lowpass"; bp.frequency.value = f; bp.Q.value = q;
+    g.gain.setValueAtTime(vol, n); src.connect(bp); bp.connect(g); g.connect(actx.destination); src.start(n);
+  } catch (e) {}
+}
+function gunshot() {
+  noise(.5, 3200, .7, .9); noise(.9, 400, .5, .6);
+  beep(110, .25, "sine", .5, -70); beep(60, .4, "triangle", .35, -30);
+  setTimeout(() => noise(.25, 1800, 1, .12), 140);
+}
+function scream() { beep(520, .5, "sawtooth", .07, 380); noise(.6, 2400, 2, .25); }
+function splatter(heavy) {
+  const c = $("#splat"), k = c.getContext("2d");
+  c.height = Math.round(120 * innerHeight / Math.max(1, innerWidth));
+  const W = c.width, H = c.height, K = painter(k);
+  k.clearRect(0, 0, W, H);
+  const blobs = [], n = heavy ? 7 : 4;
+  for (let i = 0; i < n; i++) {
+    const x = R(10, W - 10), y = R(8, H * .65), r = R(6, heavy ? 17 : 12);
+    blobs.push([x, y, r]);
+    for (let j = 0; j < 7; j++) disc(K, x + R(-r, r) * .55, y + R(-r, r) * .55, r * R(.35, .7), "#6e0808");
+    for (let j = 0; j < 5; j++) disc(K, x + R(-r, r) * .4, y + R(-r, r) * .4, r * R(.25, .5), "#8e0f12");
+    for (let j = 0; j < 4; j++) { const a = R(0, 6.28); for (let d = r * .5; d < r * R(1.4, 2.2); d += .8) disc(K, x + Math.cos(a) * d, y + Math.sin(a) * d, Math.max(.6, r * .22 * (1 - d / (r * 2.2))), "#7a0b0d"); }
+    for (let j = 0; j < 14; j++) { const a = R(0, 6.28), d = R(r, r * 2.6); disc(K, x + Math.cos(a) * d, y + Math.sin(a) * d, R(.6, 2.2), "#8e0f12"); }
+  }
+  const drips = blobs.flatMap(([x, y, r]) => Array.from({ length: 3 }, () => [Math.round(x + R(-r * .7, r * .7)), Math.round(y + r * .6), R(10, 60), R(1, 2) | 0]));
+  c.classList.add("on");
+  let t0 = performance.now();
+  (function drip(now) {
+    const k2 = Math.min(1, (now - t0) / 1300);
+    for (const [x, y, len, w] of drips) K(x, y, w + 1, Math.round(len * k2), "#7a0b0d");
+    if (k2 < 1) requestAnimationFrame(drip);
+    else setTimeout(() => c.classList.remove("on"), 250);
+  })(t0);
+}
+function flashShake() {
+  const f = $("#flash"); f.classList.remove("on"); void f.offsetWidth; f.classList.add("on");
+  const a = $("#app"); a.classList.remove("shake"); void a.offsetWidth; a.classList.add("shake");
+}
+function flinch(text) {
+  if (text) $("#pFala").textContent = `“${text}”`;
+  const w = $(".portrait-wrap"); w.classList.remove("flinch"); void w.offsetWidth; w.classList.add("flinch");
+}
+const REACAO = {
+  temp: [["Tá gelado isso.", "Pode medir, eu não tenho febre.", "Rápido, por favor."], ["Tá... tá quente aqui, né?", "Tira isso de mim.", "Eu tô bem. Juro."]],
+  olhos: [["Ai! Essa luz!", "Tá me cegando!", "Pode olhar, é só cansaço."], ["APAGA ISSO!", "Para com essa luz...", "(desvia o rosto e rosna baixo)"]],
+  bracos: [["Pode ver, não tem nada.", "Cuidado, tá doendo.", "Viu? Tudo limpo."], ["Não puxa minha manga!", "É só um arranhão, juro!", "Não precisa olhar aí."]],
+  pulso: [["Meu coração tá disparado, desculpa.", "Tô nervoso, só isso.", "Mede logo."], ["(a mão dele está fria como gelo)", "Me solta.", "Tá tudo normal, né?"]],
+  pescoco: [["Isso é um colar da minha mãe.", "Pode olhar.", "Tá com medo de mim?"], ["Não encosta no meu pescoço.", "(puxa a gola pra cima)", "Por que tá olhando tanto?"]],
+};
+const PRESSA = [["Vai demorar muito?", "Por favor, eu tô com medo.", "Moço, eu tô bem, eu juro!"], ["Tá... tá tudo bem...", "(respiração pesada)", "(os dedos começam a tremer)"]];
+
 // ---------- Estado ----------
 const S = { day: 1, score: 0, best: 0, strikes: 0, queue: [], idx: 0, cur: null, time: 0, phase: "intro",
   checked: {}, view: null, viewAt: 0, scan: null, streak: 0, dia: null, som: true, last: "" };
@@ -833,19 +947,52 @@ function useTool(id) {
 function finishScan() {
   const id = S.scan.id; S.scan = null; S.phase = "play";
   S.checked[id] = true; S.view = id; S.viewAt = performance.now() / 1000;
+  S.agit = Math.min(S.cur.infected ? 1 : .85, S.agit + .07);
+  flinch(pick(REACAO[id][S.cur.infected && chance(.6) ? 1 : 0]));
   beep(1320, .06, "sine", .06);
   renderTools(); renderFicha();
 }
 function decide(save) {
-  if (!S.cur || S.phase !== "play") return;
+  if (!S.cur) return;
+  const lunge = S.phase === "lunge";
+  if (S.phase !== "play" && !(lunge && !save)) return;
+  if (!save) return shoot(lunge);
   const p = S.cur;
-  const st = $("#stamp");
-  st.hidden = false; st.className = "stamp " + (save ? "ok" : "bad"); st.textContent = save ? "LIBERADO" : "ELIMINADO";
-  if (!save) cv.classList.add("gone");
+  stamp(true);
   S.phase = "anim";
-  if (save && p.infected) {
-    beep(180, .5, "sawtooth", .07, -120);
-    return setTimeout(() => gameOver("infectado", p), 900);
+  if (p.infected) {
+    beep(120, .5, "sawtooth", .06, 60);
+    setTimeout(() => { scream(); splatter(true); flashShake(); }, 600);
+    return setTimeout(() => gameOver("infectado", p), 2600);
+  }
+  beep(120, .45, "sawtooth", .05, 60);
+  verdict(true, p, false);
+}
+function stamp(ok) {
+  const st = $("#stamp");
+  st.hidden = false; st.className = "stamp " + (ok ? "ok" : "bad"); st.textContent = ok ? "LIBERADO" : "ELIMINADO";
+}
+function shoot(reflex) {
+  const p = S.cur;
+  S.phase = "anim";
+  $(".portrait-wrap").classList.remove("lunge"); $("#bElim").classList.remove("fire"); $("#bElim").textContent = "Eliminar";
+  const m = document.createElement("div"); m.className = "mira"; $(".portrait-wrap").append(m);
+  setTimeout(() => {
+    m.remove(); gunshot(); flashShake(); splatter(true);
+    p.shot = true; p.fall = 0; cv.classList.add("gone");
+    const t0 = performance.now();
+    (function fall(now) { p.fall = Math.min(16, (now - t0) / 40); if (p.fall < 16 && p.shot) requestAnimationFrame(fall); })(t0);
+  }, reflex ? 60 : 260);
+  setTimeout(() => { stamp(false); verdict(false, p, reflex); }, reflex ? 500 : 750);
+}
+function verdict(save, p, reflex) {
+  if (!save && !p.infected) {
+    S.strikes++; S.streak = 0; S.score = Math.max(0, S.score - 150); S.dia.erros++; S.dia.eliminados++;
+    beep(220, .3, "sawtooth", .06, -60);
+    toast(`${p.nome} estava saudável. ${distractorTxt(p)}`, "bad");
+    renderHUD();
+    if (S.strikes >= 3) return setTimeout(() => gameOver("inocentes", p), 1300);
+    return setTimeout(() => { S.idx++; nextPerson(); }, 1300);
   }
   if (!save && !p.infected) {
     S.strikes++; S.streak = 0; S.score = Math.max(0, S.score - 150); S.dia.erros++; S.dia.eliminados++;
@@ -856,11 +1003,20 @@ function decide(save) {
     const bonus = Math.min(S.streak * 20, 200);
     S.score += 100 + bonus; S.streak++; S.dia.acertos++;
     save ? S.dia.salvos++ : S.dia.eliminados++;
-    beep(save ? 660 : 330, .09); beep(save ? 990 : 250, .12, "square", .04);
-    toast(save ? `Liberado. +${100 + bonus}` : `Infectado confirmado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${100 + bonus}`, "ok");
+    if (save) { beep(660, .09); beep(990, .12, "square", .04); }
+    if (reflex) S.score += 50;
+    toast(save ? `Liberado. +${100 + bonus}` : reflex ? `Reflexo! Era infectado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${150 + bonus}` : `Infectado confirmado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${100 + bonus}`, "ok");
   }
   renderHUD();
-  setTimeout(() => { S.idx++; nextPerson(); }, 900);
+  setTimeout(() => { S.idx++; nextPerson(); }, save ? 1000 : 1400);
+}
+function startLunge() {
+  S.phase = "lunge"; S.lungeT = Math.max(1.1, 1.7 - S.day * .1);
+  scream(); flashShake();
+  $(".portrait-wrap").classList.add("lunge");
+  $("#pFala").textContent = "“RRAAAHH!”";
+  $("#bElim").textContent = "Atirar!"; $("#bElim").classList.add("fire");
+  renderHUD();
 }
 function distractorTxt(p) {
   const d = [];
@@ -894,7 +1050,9 @@ function endDay(timeout) {
 }
 function gameOver(kind, p) {
   S.phase = "over"; saveBest(); renderHUD();
-  const txt = kind === "infectado"
+  const txt = kind === "mordido"
+    ? `<h2 class="bad">Você foi mordido</h2><p>${p.nome} avançou antes que você reagisse. Tinha ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. Quanto mais você demora com um infectado, mais agitado ele fica.</p>`
+    : kind === "infectado"
     ? `<h2 class="bad">A zona foi contaminada</h2><p>Você liberou ${p.nome}, que tinha ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. A infecção se espalhou dentro dos muros.</p>`
     : `<h2 class="bad">Você foi afastado do posto</h2><p>Três sobreviventes saudáveis foram eliminados no seu turno. O comando tirou você do portão.</p>`;
   openOv(`<span class="eyebrow">Fim de jogo · Dia ${S.day}</span>${txt}
@@ -918,7 +1076,8 @@ function renderHUD() {
   $("#hPts").textContent = S.score;
   $("#hErros").textContent = "■".repeat(S.strikes) + "□".repeat(Math.max(0, 3 - S.strikes));
   const can = S.phase === "play" && !!S.cur;
-  $("#bElim").disabled = $("#bSalv").disabled = !can;
+  $("#bSalv").disabled = !can;
+  $("#bElim").disabled = !(can || S.phase === "lunge");
 }
 function renderTools() {
   const box = $("#tools");
@@ -984,6 +1143,18 @@ function loop(nowMs) {
     S.time -= dt;
     if (S.time <= 0) { S.time = 0; endDay(true); }
   }
+  if ((S.phase === "play" || S.phase === "scan") && S.cur) {
+    const p = S.cur, prev = S.agit;
+    S.agit = p.infected ? S.agit + dt / Math.max(9, 17 - S.day) : Math.min(.85, S.agit + dt / 30);
+    if (prev < .5 && S.agit >= .5) flinch(pick(PRESSA[p.infected && chance(.5) ? 1 : 0]));
+    if (prev < .8 && S.agit >= .8) flinch(p.infected ? pick(PRESSA[1]) : "Por favor! Eu tenho família!");
+    if (p.infected && S.agit >= 1 && S.phase === "play") startLunge();
+  }
+  if (S.phase === "lunge") {
+    S.lungeT -= dt;
+    if (S.lungeT <= 0) { S.phase = "over"; $(".portrait-wrap").classList.remove("lunge"); $("#bElim").classList.remove("fire"); $("#bElim").textContent = "Eliminar"; scream(); splatter(true); flashShake(); setTimeout(() => gameOver("mordido", S.cur), 2200); }
+  }
+  $("#agit").style.width = Math.min(100, (S.agit || 0) * 100) + "%";
   if (S.scan && S.phase === "scan") {
     S.scan.t += dt;
     $("#scan").style.width = Math.min(100, S.scan.t / SCAN_T * 100) + "%";
@@ -998,9 +1169,14 @@ function loop(nowMs) {
   }
   if (S.phase === "gate" && S.g) {
     const g = S.g, L = gateLine();
-    g.walk = Math.min(1, g.walk + dt / 1.4);
-    if (g.walk >= .6 && g.shown < L.length) {
-      const before = Math.floor(g.shown); g.shown = Math.min(L.length, g.shown + dt * 38);
+    g.walk = Math.min(1, g.walk + dt / .9);
+    if (g.walk >= .4 && g.shown >= L.length && g.mode !== "menu") {
+      g.wait += dt;
+      if (g.wait > .4 + L.length / 40) gateTap();
+    }
+    if (g.walk >= .4 && g.shown < L.length) {
+      if (g.shown === 0) gateShake();
+      const before = Math.floor(g.shown); g.shown = Math.min(L.length, g.shown + dt * 55);
       if (Math.floor(g.shown) !== before) { renderGate(); if (before % 3 === 0 && !g.me) beep(160 + (S.cur.seed % 5) * 30, .025, "square", .015); }
     }
     gateScene(G, now, S.cur, g.walk);
@@ -1018,6 +1194,7 @@ function loop(nowMs) {
   if (S.phase === "play" || S.phase === "scan") { $("#hTempo").textContent = fmtTime(S.time); $("#hTempo").classList.toggle("warn", S.time < 15); }
   requestAnimationFrame(loop);
 }
+if (location.hash === "#debug") window.__zq = { S, makePerson };
 renderTools(); renderFicha(); renderHUD();
 startGame();
 requestAnimationFrame(loop);
