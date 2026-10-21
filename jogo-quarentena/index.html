@@ -84,7 +84,7 @@ canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: bloc
 .report .r .d.neg { color: var(--danger); } .report .r .d.pos { color: var(--safe); }
 .report small { color: var(--muted); font-size: 11px; display: block; }
 .evento { border-left: 3px solid var(--danger); padding: 6px 10px; background: #2c1d19; border-radius: 0 5px 5px 0; font-size: 14px; line-height: 1.4; }
-#app.blackout canvas { filter: brightness(.45) contrast(1.2); }
+#app.blackout canvas { filter: brightness(.62) saturate(.7); }
 .booth {
   display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: start;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px;
@@ -347,6 +347,17 @@ html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 .atk canvas { width: 100%; max-width: 640px; height: auto; aspect-ratio: 128 / 72; border-radius: 4px; }
 .atk.shake canvas { animation: flinch .2s infinite; }
 @keyframes atkIn { from { opacity: 0; } }
+.tip {
+  position: fixed; z-index: 22; left: 50%; transform: translateX(-50%); width: min(420px, calc(100% - 32px));
+  background: #f1e6c8; color: #1c1a12; border-radius: 8px; padding: 12px 14px; box-shadow: 0 8px 30px rgba(0,0,0,.6);
+  display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.4; animation: atkIn .2s ease-out;
+}
+.tip b { color: #7a4a00; }
+.tip .tip-top { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #8a6a2a; display: flex; justify-content: space-between; }
+.tip button { align-self: flex-end; background: #1c1a12; color: #f1e6c8; border: 0; border-radius: 5px; padding: 7px 14px; font-weight: 700; font-size: 13px; }
+.tip .skip { background: none; color: #8a6a2a; padding: 0; font-weight: 400; text-decoration: underline; font-size: 11px; }
+.hl { outline: 3px solid var(--accent) !important; outline-offset: 2px; position: relative; z-index: 21; animation: hl 1s infinite alternate; }
+@keyframes hl { to { outline-color: rgba(227,168,59,.35); } }
 .cine-title { display: flex; flex-direction: column; gap: 10px; }
 .cine-title h1 { margin: 0; font-family: var(--f-display); font-size: clamp(28px, 8vw, 40px); letter-spacing: .04em; text-transform: uppercase; color: var(--fg); }
 .cine-title span { font-size: 14px; color: var(--muted); }
@@ -422,6 +433,7 @@ html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 </div>
 <div id="ov" class="ov" hidden><div id="ovCard" class="card"></div></div>
 <div id="toast" class="toast" hidden></div>
+<div id="tip" class="tip" hidden></div>
 <div id="atk" class="atk" hidden><canvas id="ak" width="128" height="72"></canvas></div>
 <canvas id="splat" width="120" height="220"></canvas>
 <div id="flash"></div>
@@ -479,10 +491,10 @@ const PROFS = [
 ];
 const COMUNS = [["professor", "professora"], ["motorista", "motorista"], ["estudante", "estudante"], ["vendedor", "vendedora"], ["costureiro", "costureira"], ["cantor", "cantora"]];
 const BASE = {
-  muro:    { nome: "Muro",    func: "Mantém o muro e o portão de pé", queda: d => 12 + d * 2, prod: 7 },
-  comida:  { nome: "Comida",  func: "Planta e cozinha para a zona",   queda: () => 8 + Math.floor(S.pop / 2), prod: 6 },
-  saude:   { nome: "Saúde",   func: "Cuida dos doentes e feridos",    queda: () => 8, prod: 5 },
-  energia: { nome: "Energia", func: "Mantém geradores e refletores",  queda: () => 9, prod: 6 },
+  muro:    { nome: "Muro",    func: "Mantém o muro e o portão de pé", queda: d => 15 + d * 3, prod: 7 },
+  comida:  { nome: "Comida",  func: "Planta e cozinha para a zona",   queda: () => 11 + Math.floor(S.pop / 2), prod: 6 },
+  saude:   { nome: "Saúde",   func: "Cuida dos doentes e feridos",    queda: () => 11, prod: 5 },
+  energia: { nome: "Energia", func: "Mantém geradores e refletores",  queda: d => d >= 3 ? 20 : 11, prod: 6 },
 };
 const ORIGENS = ["Setor Norte", "Vila Industrial", "Bairro do Porto", "Rodovia 116", "Centro antigo", "Zona rural", "Hospital Regional", "Estação de trem"];
 const FALAS = [
@@ -778,6 +790,8 @@ function toExam() {
   $("#gate").hidden = true; $("#mesa").hidden = false;
   S.phase = "play"; beep(520, .06); beep(780, .08);
   renderTools(); renderHUD();
+  if (TUT.steps.length) tutEvent("triagem");
+  else if (S.idx === 0 && S.day > 1) setTimeout(tutNovidades, 50);
 }
 function renderGate() {
   const g = S.g, L = gateLine(), done = g.shown >= L.length;
@@ -1169,8 +1183,9 @@ function dayConfig(d) {
 }
 
 function startGame() {
+  S.tutDone = S.tutDone || {}; tutEnd();
   Object.assign(S, { day: 1, score: 0, strikes: 0, streak: 0, pop: 0, blackout: false,
-    base: { muro: 70, comida: 65, saude: 60, energia: 60 }, workers: { muro: 1, comida: 1, saude: 1, energia: 1 } });
+    base: { muro: 55, comida: 45, saude: 45, energia: 50 }, bat: 3, batCharge: 0, workers: { muro: 1, comida: 1, saude: 1, energia: 1 } });
   renderBase();
   if (S.seenCine) dayIntro();
   else { S.queue = []; S.idx = 0; S.cur = null; renderHUD(); playCine(dayIntro); }
@@ -1178,11 +1193,22 @@ function startGame() {
 function dayIntro() {
   const cfg = dayConfig(S.day);
   S.queue = Array.from({ length: cfg.n }, () => makePerson(S.day));
+  if (S.day === 1 && !S.tutDone.dia1) {
+    const p = S.queue[0];
+    Object.assign(p, { infected: true, signs: ["temp"], temp: 39.1, olhos: "normal" });
+  }
   S.idx = 0; S.cur = null; S.time = cfg.time; S.phase = "intro"; S.view = null;
   S.dia = { salvos: 0, eliminados: 0, acertos: 0, erros: 0, mortos: 0 };
   const novos = TOOLS.filter(t => t.dia === S.day);
+  let alerta = "";
+  if (S.day === 3) {
+    S.base.energia = Math.max(0, S.base.energia - 35);
+    S.blackout = S.base.energia <= 0; renderBase();
+    alerta += `<div class="evento">O gerador principal entrou em colapso: energia −35. A partir de hoje a energia se desgasta quase o dobro. Salve eletricistas e mecânicos.</div>`;
+  }
   $("#app").classList.toggle("blackout", !!S.blackout);
-  const alerta = S.blackout ? `<div class="evento">Apagão: os exames demoram o dobro hoje.</div>` : "";
+  if (S.blackout) alerta += `<div class="evento">Apagão: sem luz para examinar braços e pescoço hoje. A lanterna não recarrega.</div>`;
+  if (S.day >= 2 && !S.blackout) { S.bat = 3; S.batCharge = 0; }
   const intro = S.day === 1
     ? `<p>Cada sobrevivente vai tentar te convencer no portão. Ouça, pergunte o que quiser e leve para a triagem. Lá você examina e decide: <b>salvar</b> quem está saudável, <b>eliminar</b> quem tem sinal de Febre Âmbar.</p>
        <p>A conversa pode dar pistas, mas só o exame confirma. Deixar um infectado entrar acaba com a zona: fim de jogo na hora. Eliminar um inocente conta como erro. Com 3 erros, você é afastado.</p>
@@ -1206,6 +1232,10 @@ function nextPerson() {
   if (S.idx >= S.queue.length) return endDay(false);
   const p = S.cur = S.queue[S.idx];
   S.checked = {}; S.view = null; S.scan = null;
+  if (S.day >= 2 && S.bat <= 0) {
+    if (S.batCharge > 0) S.batCharge--;
+    else if (!S.blackout) { S.bat = 3; toast("Lanterna carregada: 3 usos.", "ok"); }
+  }
   $("#pNome").textContent = p.nome;
   $("#pInfo").textContent = `${p.idade} anos · ${p.oficio} · veio de ${p.origem}`;
   $("#pRole").hidden = false;
@@ -1214,12 +1244,19 @@ function nextPerson() {
   $("#pFala").textContent = `“${p.fala}”`;
   renderTools(); renderFicha(); renderHUD();
   gateStart(p);
+  if (S.day === 1 && S.idx === 0 && !S.tutDone.dia1) { S.tutDone.dia1 = true; setTimeout(() => tutStart(TUT_DIA1.slice()), 400); }
 }
 function useTool(id) {
   if (!S.cur || (S.phase !== "play")) return;
   const t = TOOLS.find(t => t.id === id);
   if (!t || t.dia > S.day) return;
   if (S.checked[id]) { S.view = id; S.viewAt = performance.now() / 1000 - 5; renderTools(); return; }
+  if (S.blackout && (id === "bracos" || id === "pescoco")) return toast("Sem energia: está escuro demais para esse exame.", "bad");
+  if (id === "olhos" && S.day >= 2) {
+    if (S.bat <= 0) return toast(S.blackout && !S.batCharge ? "Lanterna sem bateria e sem energia para recarregar." : `Lanterna carregando. Volta em ${S.batCharge + 1} ${S.batCharge ? "pessoas" : "pessoa"}.`, "bad");
+    S.bat--;
+    if (S.bat === 0) { S.batCharge = 2; toast("A bateria da lanterna acabou. Vai carregar pelas próximas 2 pessoas.", "bad"); }
+  }
   S.scan = { id, t: 0 }; S.phase = "scan"; S.view = null;
   beep(880, .05); renderTools();
 }
@@ -1230,9 +1267,12 @@ function finishScan() {
   flinch(pick(REACAO[id][S.cur.infected && chance(.6) ? 1 : 0]));
   beep(1320, .06, "sine", .06);
   renderTools(); renderFicha();
+  tutEvent("tool:" + id);
 }
 function decide(save) {
   if (!S.cur) return;
+  if (S.tut && TUT.steps[TUT.i] && TUT.steps[TUT.i].wait !== "decide" && S.phase !== "lunge") return toast("Siga o tutorial ou toque em Pular tutorial.", "");
+  if (TUT.steps.length) { tutEnd(); }
   const lunge = S.phase === "lunge";
   if (S.phase !== "play" && !(lunge && !save)) return;
   if (!save) return shoot(lunge);
@@ -1324,7 +1364,7 @@ function runBase() {
   if (S.base.comida <= 0) { perde(2, "Fome"); S.pop = Math.max(0, S.pop - 3); S.base.saude = Math.max(0, S.base.saude - 15); eventos.push("Sem comida, três moradores foram embora e a saúde da zona piorou."); }
   if (S.base.saude <= 0) perde(1, "Uma doença se espalhou");
   S.blackout = S.base.energia <= 0;
-  if (S.blackout) eventos.push("Sem energia: os refletores apagaram. Amanhã os exames vão demorar o dobro no escuro.");
+  if (S.blackout) eventos.push("Sem energia: os refletores apagaram. Amanhã não dá para examinar braços nem pescoço, e a lanterna não recarrega.");
   for (const r of rows) if (r.depois > 0 && r.depois < 25) eventos.push(`${BASE[r.k].nome} está em ${Math.round(r.depois)}. Precisa de ${({ muro: "ferreiro ou soldador", comida: "agricultor ou cozinheiro", saude: "médico ou enfermeiro", energia: "eletricista ou mecânico" })[r.k]}.`);
   renderBase();
   const html = `<div class="report">${rows.map(r => {
@@ -1497,8 +1537,11 @@ function renderTools() {
   });
   [...box.children].forEach(b => {
     const t = TOOLS.find(t => t.id === b.dataset.id), locked = t.dia > S.day;
-    b.querySelector("span").textContent = locked ? `Dia ${t.dia}` : t.nome;
-    b.disabled = locked || !S.cur;
+    const escuro = S.blackout && (t.id === "bracos" || t.id === "pescoco");
+    const semBat = t.id === "olhos" && S.day >= 2 && S.bat <= 0 && !S.checked.olhos;
+    b.querySelector("span").textContent = locked ? `Dia ${t.dia}` : escuro ? "Sem luz" : semBat ? (S.blackout && !S.batCharge ? "Sem bateria" : `Carregando`)
+      : t.id === "olhos" && S.day >= 2 ? `Lanterna ${"▮".repeat(S.bat)}${"▯".repeat(3 - S.bat)}` : t.nome;
+    b.disabled = locked || !S.cur || escuro || semBat;
     b.classList.toggle("done", !!S.checked[t.id]);
     b.classList.toggle("on", S.view === t.id || (S.scan && S.scan.id === t.id));
   });
@@ -1550,19 +1593,72 @@ document.addEventListener("keydown", e => {
   else if (k === "s") decide(true);
 });
 
+// ---------- Tutorial ----------
+const TUT = { steps: [], i: 0 };
+const TUT_DIA1 = [
+  { el: "#dlg", txt: "Este é o <b>portão</b>. Cada sobrevivente vai tentar te convencer a deixar entrar. A conversa pode dar pistas, mas não prova nada." },
+  { el: "#choices", txt: "Você pode fazer perguntas. Quando quiser, toque em <b>Levar para a triagem</b>.", wait: "triagem" },
+  { el: "#base", txt: "Estes são os <b>recursos da base</b>. Todo dia eles se desgastam. Quem você salva repõe: ferreiro mantém o muro, agricultor a comida, médico a saúde, eletricista a energia. <b>Muro em zero, a horda entra.</b>" },
+  { el: "#pRole", txt: "Aqui aparece a <b>profissão</b> da pessoa e o que ela faria pela base. Matar quem tem profissão também custa caro." },
+  { el: ".agit", txt: "A <b>agitação</b> sobe enquanto você demora. No máximo, o infectado ataca e o saudável entra em pânico, grita e atrai zumbis. Hoje ela sobe devagar. Está pausada enquanto você lê." },
+  { el: '.tool[data-id="temp"]', txt: "Comece pelo <b>termômetro</b>. Toque nele.", wait: "tool:temp" },
+  { el: ".exam-view", txt: "<b>38,0 °C ou mais é febre</b>, sinal de infecção. Até 37,9 °C pode passar." },
+  { el: '.tool[data-id="olhos"]', txt: "Agora a <b>lanterna</b>. Toque nela.", wait: "tool:olhos" },
+  { el: ".exam-view", txt: "Olhe a parte branca do olho: <b>amarelada</b>, com pupila que não diminui na luz, é infecção. Olho vermelho de cansaço é normal." },
+  { el: ".decide", txt: "Decida. <b>Salvar</b> um infectado acaba com o jogo na hora. <b>Eliminar</b> um saudável conta como erro (3 erros e você é afastado).", wait: "decide" },
+];
+const TUT_NOVO = {
+  bracos: { el: '.tool[data-id="bracos"]', txt: "Novo exame: <b>braços</b>. Mordida (marca de dentes vermelha com roxo em volta) é infecção. Cicatriz clara e tatuagem são normais. Sem energia, está escuro demais para usar." },
+  olhos: { el: '.tool[data-id="olhos"]', txt: "A partir de hoje a <b>lanterna tem bateria</b>: 3 usos. Quando acaba, fica carregando por 2 pessoas. Sem energia, não recarrega." },
+  pulso: { el: '.tool[data-id="pulso"]', txt: "Novo exame: <b>pulso</b>. Abaixo de 50 bpm é infecção. Pulso acelerado é só nervosismo." },
+  energia: { el: '.base-item[data-r="energia"]', txt: "O <b>gerador</b> está em colapso. A energia agora cai rápido. Sem energia, você <b>não consegue examinar braços nem pescoço</b>." },
+  pescoco: { el: '.tool[data-id="pescoco"]', txt: "Novo exame: <b>pescoço</b>. Veias escuras e arroxeadas subindo pelo pescoço são infecção. Colar e tatuagem são normais. Sem energia, não dá para ver." },
+};
+function tutStart(steps) { if (!steps.length) return; TUT.steps = steps; TUT.i = 0; tutShow(); }
+function tutEnd() { TUT.steps = []; tutShow(); }
+function tutShow() {
+  document.querySelectorAll(".hl").forEach(e => e.classList.remove("hl"));
+  const st = TUT.steps[TUT.i], tip = $("#tip");
+  if (!st) { tip.hidden = true; S.tut = false; return; }
+  S.tut = true;
+  const el = document.querySelector(st.el);
+  if (!el || !el.offsetParent) { tip.hidden = true; return; }
+  el.classList.add("hl");
+  tip.innerHTML = `<div class="tip-top"><span>Tutorial · ${TUT.i + 1}/${TUT.steps.length}</span><button class="skip" type="button" id="tutSkip">Pular tutorial</button></div><div>${st.txt}</div>${st.wait ? "" : `<button type="button" id="tutOk">Entendi</button>`}`;
+  tip.hidden = false;
+  const r = el.getBoundingClientRect(), h = tip.offsetHeight;
+  const below = r.bottom + 12 + h < innerHeight - 8;
+  tip.style.top = (below ? r.bottom + 12 : Math.max(8, r.top - 12 - h)) + "px";
+  $("#tutSkip").onclick = tutEnd;
+  if (!st.wait) $("#tutOk").onclick = () => { TUT.i++; tutShow(); };
+}
+function tutEvent(name) {
+  const st = TUT.steps[TUT.i];
+  if (st && st.wait === name) { TUT.i++; setTimeout(tutShow, 30); }
+}
+function tutNovidades() {
+  // Primeira pessoa de cada dia em que algo muda: dica do que é novo.
+  const k = [];
+  if (S.day === 2) k.push("bracos", "olhos");
+  if (S.day === 3) k.push("pulso", "energia");
+  if (S.day === 4) k.push("pescoco");
+  const steps = k.filter(x => !S.tutDone[x]).map(x => { S.tutDone[x] = true; return TUT_NOVO[x]; });
+  tutStart(steps);
+}
+
 // ---------- Loop ----------
 let last = performance.now();
 function loop(nowMs) {
   const now = nowMs / 1000, dt = Math.min(.1, (nowMs - last) / 1000); last = nowMs;
-  if (S.phase === "play" || S.phase === "scan") {
+  if ((S.phase === "play" || S.phase === "scan") && !S.tut) {
     S.time -= dt;
     if (S.time <= 0) { S.time = 0; endDay(true); }
   }
   if ((S.phase === "play" || S.phase === "scan") && S.cur) {
     const p = S.cur, prev = S.agit;
     // Saudáveis e infectados se agitam no mesmo ritmo (com variação por pessoa): esperar não revela nada, só aumenta o risco.
-    p.agitRate = p.agitRate || R(.8, 1.2) / Math.max(9, 17 - S.day);
-    S.agit = Math.min(1, S.agit + dt * p.agitRate);
+    p.agitRate = p.agitRate || R(.8, 1.2) / (S.day === 1 ? 45 : Math.max(9, 17 - S.day));
+    if (!S.tut) S.agit = Math.min(1, S.agit + dt * p.agitRate);
     if (prev < .5 && S.agit >= .5) flinch(pick(PRESSA[p.infected && chance(.5) ? 1 : 0]));
     if (prev < .8 && S.agit >= .8) flinch(p.infected ? pick(PRESSA[1]) : pick(["Por favor! Eu tenho família!", "Eu não aguento mais esperar!", "(começa a hiperventilar)"]));
     if (S.agit >= 1 && S.phase === "play") p.infected ? startLunge() : panic();
@@ -1574,7 +1670,7 @@ function loop(nowMs) {
   $("#agit").style.width = Math.min(100, (S.agit || 0) * 100) + "%";
   if (S.scan && S.phase === "scan") {
     S.scan.t += dt;
-    const st = SCAN_T * (S.blackout ? 2 : 1);
+    const st = SCAN_T;
     $("#scan").style.width = Math.min(100, S.scan.t / st * 100) + "%";
     if (S.scan.t >= st) finishScan();
   } else if (!S.scan) $("#scan").style.width = "0";
