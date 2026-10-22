@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives.serialization import pkcs12
 HERE = os.path.dirname(os.path.abspath(__file__))
 PACKAGE = "com.zonadequarentena.jogo"
 LABEL = "Zona de Quarentena"
-VERSION_CODE, VERSION_NAME = 2, "1.1"
+VERSION_CODE, VERSION_NAME = 3, "1.2"
 MIN_SDK, TARGET_SDK = 21, 29
 
 # IDs de atributos do framework (android.R.attr / android.R.style, API 29)
