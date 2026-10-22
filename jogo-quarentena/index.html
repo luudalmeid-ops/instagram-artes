@@ -358,6 +358,14 @@ html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 .tip .skip { background: none; color: #8a6a2a; padding: 0; font-weight: 400; text-decoration: underline; font-size: 11px; }
 .hl { outline: 3px solid var(--accent) !important; outline-offset: 2px; position: relative; z-index: 21; animation: hl 1s infinite alternate; }
 @keyframes hl { to { outline-color: rgba(227,168,59,.35); } }
+/* Abertura do estúdio */
+#splash { position: fixed; inset: 0; z-index: 40; background: #000; display: grid; place-items: center; cursor: pointer; }
+.sp-in { display: flex; flex-direction: column; align-items: center; gap: 16px; opacity: 0; animation: spIn 3.4s ease-in-out forwards; }
+.sp-in canvas { width: 88px; height: 88px; }
+.sp-word { font-family: var(--f-display); font-weight: 700; font-size: 30px; letter-spacing: .5em; margin-right: -.5em; color: #f2efe6; }
+.sp-sub { font-size: 11px; letter-spacing: .4em; margin-right: -.4em; text-transform: uppercase; color: #8a8a80; }
+@keyframes spIn { 0% { opacity: 0; transform: scale(.96); } 25% { opacity: 1; transform: scale(1); } 78% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .sp-in { animation-duration: 2.4s; } }
 .cine-title { display: flex; flex-direction: column; gap: 10px; }
 .cine-title h1 { margin: 0; font-family: var(--f-display); font-size: clamp(28px, 8vw, 40px); letter-spacing: .04em; text-transform: uppercase; color: var(--fg); }
 .cine-title span { font-size: 14px; color: var(--muted); }
@@ -424,6 +432,7 @@ html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
   </footer>
 </div>
 
+<div id="splash"><div class="sp-in"><canvas id="spLogo" width="13" height="13"></canvas><div class="sp-word">VALTORE</div><div class="sp-sub">apresenta</div></div></div>
 <div id="cine" class="cine" hidden>
   <div class="cine-in">
     <canvas id="cc" width="128" height="72"></canvas>
@@ -1715,6 +1724,18 @@ function loop(nowMs) {
   if (S.phase === "play" || S.phase === "scan") { $("#hTempo").textContent = fmtTime(S.time); $("#hTempo").classList.toggle("warn", S.time < 15); }
   requestAnimationFrame(loop);
 }
+// Abertura do estúdio: logo da Valtore no fundo preto. Toque pula.
+(() => {
+  const V = ["XX.........XX", "XX.........XX", ".XX.......XX.", ".XX.......XX.", "..XX.....XX..", "..XX.....XX..",
+    "...XX...XX...", "...XX...XX...", "....XX.XX....", "....XXXXX....", ".....XXX.....", "......X......"];
+  const k = painter($("#spLogo").getContext("2d"));
+  V.forEach((row, y) => [...row].forEach((c, x) => { if (c === "X") k(x, y, 1, 1, y >= 9 ? "#e3a83b" : "#f2efe6"); }));
+  const sp = $("#splash");
+  const fim = () => sp.remove();
+  sp.addEventListener("click", e => { e.stopPropagation(); fim(); });
+  setTimeout(fim, 3500);
+  if (location.hash === "#debug") fim();
+})();
 if (location.hash === "#debug") window.__zq = { S, makePerson, MUS, ctx: () => actx };
 renderTools(); renderFicha(); renderHUD();
 startGame();
