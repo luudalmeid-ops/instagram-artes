@@ -1,0 +1,1771 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#171a16">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Quarentena">
+</head>
+<body>
+<!--GAME-START-->
+<title>Zona de Quarentena</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=VT323&display=swap">
+<style>
+/* Layout: uma tela de posto de controle — HUD, cabine com o sobrevivente, mesa de exames, decisão */
+:root {
+  --bg: #171a16;
+  --panel: #23281f;
+  --panel-2: #2e3528;
+  --line: #3d4634;
+  --fg: #e9e5d3;
+  --muted: #a3a48f;
+  --accent: #e3a83b;
+  --danger: #d4523f;
+  --safe: #5cae67;
+  --screen: #0f1a12;
+  --screen-fg: #8fe39b;
+  --f-display: "Chakra Petch", "Trebuchet MS", system-ui, sans-serif;
+  --f-body: "Chakra Petch", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-data: "VT323", ui-monospace, "Courier New", monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--f-body); font-size: 15px;
+  -webkit-tap-highlight-color: transparent; user-select: none;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+
+#app {
+  max-width: 520px; margin: 0 auto; min-height: 100%;
+  display: flex; flex-direction: column; gap: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px;
+}
+
+.hud { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.hud-item {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+  padding: 4px 6px; display: flex; flex-direction: column; min-width: 0;
+}
+.lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.val { font-family: var(--f-data); font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
+.val.warn { color: var(--danger); }
+.strikes { color: var(--danger); letter-spacing: 2px; }
+
+.base { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.base-item { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 5px 6px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.base-item.pulse { animation: basePulse .6s; }
+@keyframes basePulse { 30% { border-color: var(--safe); background: var(--panel-2); } }
+.base-item.hurt { animation: baseHurt .6s; }
+@keyframes baseHurt { 30% { border-color: var(--danger); background: #3a1f1b; } }
+.base-top { display: flex; justify-content: space-between; gap: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.base-top b { font-family: var(--f-data); font-weight: 400; font-size: 15px; color: var(--fg); letter-spacing: 0; line-height: .8; }
+.base-sub { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.meter { height: 5px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--safe); transition: width .5s; }
+.meter i.mid { background: var(--accent); } .meter i.low { background: var(--danger); }
+.chip { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 10px; background: var(--panel-2); color: var(--muted); align-self: flex-start; }
+.chip.on { background: #3a3220; color: var(--accent); }
+.report { display: flex; flex-direction: column; gap: 6px; }
+.report .r { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; background: var(--panel-2); border-radius: 5px; padding: 7px 10px; font-size: 14px; }
+.report .r b { font-family: var(--f-data); font-weight: 400; font-size: 20px; }
+.report .r .d { font-family: var(--f-data); font-size: 18px; min-width: 3.2em; text-align: right; }
+.report .r .d.neg { color: var(--danger); } .report .r .d.pos { color: var(--safe); }
+.report small { color: var(--muted); font-size: 11px; display: block; }
+.evento { border-left: 3px solid var(--danger); padding: 6px 10px; background: #2c1d19; border-radius: 0 5px 5px 0; font-size: 14px; line-height: 1.4; }
+#app.blackout canvas { filter: brightness(.62) saturate(.7); }
+.booth {
+  display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: start;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px;
+}
+.portrait-wrap { position: relative; width: 150px; aspect-ratio: 1; max-width: 100%; }
+#cv { width: 100%; height: 100%; border-radius: 3px; transition: filter .4s; }
+#cv.gone { filter: brightness(.7) saturate(.7); }
+.portrait-wrap.flinch { animation: flinch .3s; }
+.portrait-wrap.lunge { animation: lunge .12s infinite; z-index: 5; }
+.portrait-wrap.lunge #cv { transform: scale(1.18); transition: transform .15s; box-shadow: 0 0 0 3px var(--danger); }
+@keyframes flinch { 25% { transform: translateX(-4px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); } }
+@keyframes lunge { 0% { transform: translate(-3px, 2px); } 50% { transform: translate(3px, -2px); } 100% { transform: translate(-2px, -1px); } }
+.mira {
+  position: absolute; left: 50%; top: 40%; width: 64px; height: 64px; margin: -32px 0 0 -32px; z-index: 6;
+  border: 2px solid #ff3b2f; border-radius: 50%; animation: mira .22s ease-out; pointer-events: none;
+}
+.mira::before, .mira::after { content: ""; position: absolute; background: #ff3b2f; }
+.mira::before { left: 50%; top: -10px; bottom: -10px; width: 2px; margin-left: -1px; }
+.mira::after { top: 50%; left: -10px; right: -10px; height: 2px; margin-top: -1px; }
+@keyframes mira { from { transform: scale(2.4); opacity: 0; } }
+.agit { display: flex; align-items: center; gap: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.agit span { flex: 1; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.agit i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--danger)); }
+#app.shake { animation: shake .35s; }
+@keyframes shake { 20% { transform: translate(-6px, 3px); } 40% { transform: translate(5px, -4px); } 60% { transform: translate(-4px, 2px); } 80% { transform: translate(3px, -1px); } }
+.scene.shake { animation: flinch .25s; }
+#flash { position: fixed; inset: 0; z-index: 26; background: #fff; opacity: 0; pointer-events: none; }
+#flash.on { animation: flash .18s ease-out; }
+@keyframes flash { from { opacity: .85; } to { opacity: 0; } }
+#splat {
+  position: fixed; inset: 0; width: 100%; height: 100%; z-index: 25; pointer-events: none;
+  opacity: 0; transition: opacity 1.4s ease-in;
+}
+#splat.on { opacity: .92; transition: none; }
+.btn.danger.fire { animation: fire .3s infinite alternate; font-size: 20px; }
+@keyframes fire { to { background: #ff3b2f; transform: scale(1.04); } }
+.stamp {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-12deg);
+  font-family: var(--f-display); font-weight: 700; font-size: 19px; letter-spacing: .06em;
+  padding: 3px 8px; border: 3px solid currentColor; border-radius: 3px;
+  background: rgba(0,0,0,.35); animation: stamp .25s ease-out;
+}
+.stamp.ok { color: var(--safe); } .stamp.bad { color: var(--danger); }
+@keyframes stamp { from { transform: translate(-50%, -50%) rotate(-12deg) scale(1.8); opacity: 0; } }
+.ident { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.nome { font-family: var(--f-display); font-weight: 700; font-size: 18px; text-wrap: balance; }
+.info { font-size: 12px; color: var(--muted); }
+.fala {
+  margin: 6px 0 0; padding: 8px 10px; background: var(--panel-2); border-radius: 4px;
+  font-size: 14px; line-height: 1.35; position: relative;
+}
+.fala::before {
+  content: ""; position: absolute; left: -6px; top: 12px;
+  border: 6px solid transparent; border-left: 0; border-right-color: var(--panel-2);
+}
+
+.exam { display: grid; grid-template-columns: 1.25fr 1fr; gap: 10px; }
+.exam-view {
+  position: relative; background: var(--screen); border: 1px solid var(--line); border-radius: 6px;
+  overflow: hidden; aspect-ratio: 64 / 40; max-width: 100%;
+}
+#ex { width: 100%; height: 100%; }
+.ex-msg {
+  position: absolute; inset: auto 0 0 0; padding: 3px 8px;
+  font-family: var(--f-data); font-size: 20px; color: var(--screen-fg);
+  background: linear-gradient(transparent, rgba(0,0,0,.65));
+}
+.ex-msg:empty { display: none; }
+.scanbar { position: absolute; left: 0; right: 0; top: 0; height: 3px; }
+.scanbar i { display: block; height: 100%; width: 0; background: var(--screen-fg); }
+.ficha {
+  list-style: none; margin: 0; padding: 8px; min-width: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  display: flex; flex-direction: column; gap: 4px; font-size: 13px;
+}
+.ficha .tit { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.ficha li.row { display: flex; justify-content: space-between; gap: 6px; cursor: pointer; }
+.ficha li.row b { font-family: var(--f-data); font-weight: 400; font-size: 18px; line-height: 1; }
+.ficha .vazio { color: var(--muted); font-size: 12px; }
+
+.tools { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.tool {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px;
+  padding: 8px 2px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-size: 11px; min-width: 0;
+}
+.tool canvas { width: 28px; height: 28px; }
+.tool:hover:not(:disabled) { border-color: var(--muted); }
+.tool.on { border-color: var(--accent); }
+.tool.done span::after { content: " ✓"; color: var(--safe); }
+.tool:disabled { opacity: .35; cursor: default; }
+
+.decide { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn {
+  border: 0; border-radius: 6px; padding: 14px 10px;
+  font-family: var(--f-display); font-weight: 700; font-size: 17px; letter-spacing: .08em; text-transform: uppercase;
+  box-shadow: inset 0 -4px 0 rgba(0,0,0,.28);
+}
+.btn:active { transform: translateY(2px); box-shadow: inset 0 -2px 0 rgba(0,0,0,.28); }
+.btn.danger { background: var(--danger); color: #fff; }
+.btn.safe { background: var(--safe); color: #0d1a0f; }
+.btn.main { background: var(--accent); color: #1c1405; width: 100%; }
+.btn:disabled { opacity: .45; }
+.foot { display: flex; justify-content: space-between; }
+.link { background: none; border: 0; color: var(--muted); font-size: 13px; padding: 4px 0; text-decoration: underline; text-underline-offset: 3px; }
+
+.ov {
+  position: fixed; inset: 0; background: rgba(8,10,7,.82); z-index: 20;
+  display: grid; place-items: center;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px));
+}
+.card {
+  width: 100%; max-width: 440px; max-height: 100%; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px;
+  display: flex; flex-direction: column; gap: 12px; user-select: text;
+}
+.card h2 { margin: 0; font-family: var(--f-display); font-size: 26px; text-wrap: balance; }
+.card h2.bad { color: var(--danger); }
+.card p { margin: 0; line-height: 1.45; color: var(--fg); }
+.card .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--accent); }
+.rules { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.rules li { background: var(--panel-2); border-radius: 5px; padding: 8px 10px; font-size: 14px; line-height: 1.4; }
+.rules li b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.rules li.novo { outline: 1px solid var(--accent); }
+.rules li.novo b::after { content: "  novo"; color: var(--accent); }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.stats div { background: var(--panel-2); border-radius: 5px; padding: 8px 10px; display: flex; flex-direction: column; }
+.stats b { font-family: var(--f-data); font-size: 28px; font-weight: 400; line-height: 1; }
+.stats span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  width: min(480px, calc(100% - 32px)); z-index: 15;
+  background: var(--panel-2); border-left: 4px solid var(--accent); border-radius: 5px;
+  padding: 10px 12px; font-size: 14px; line-height: 1.35; box-shadow: 0 6px 24px rgba(0,0,0,.5);
+}
+.toast.ok { border-left-color: var(--safe); } .toast.bad { border-left-color: var(--danger); }
+
+/* Portão */
+#mesa { display: flex; flex-direction: column; gap: 10px; }
+#gate { display: flex; flex-direction: column; gap: 10px; }
+.scene { position: relative; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #0b1020; }
+.scene canvas { width: 100%; height: auto; aspect-ratio: 128 / 72; max-width: 100%; }
+.scene .tag {
+  position: absolute; left: 8px; top: 8px; font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--accent); background: rgba(0,0,0,.55); padding: 3px 6px; border-radius: 3px;
+}
+.dlg {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px;
+  min-height: 112px; display: flex; flex-direction: column; gap: 6px; cursor: pointer;
+}
+.dlg .who { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.dlg .txt { font-size: 17px; line-height: 1.4; min-height: 3em; }
+.dlg .txt.me { color: var(--accent); }
+.dlg .hint { font-size: 11px; color: var(--muted); align-self: flex-end; }
+.choices { display: grid; gap: 8px; }
+.opt {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px;
+  text-align: left; font-size: 15px;
+}
+.opt:hover { border-color: var(--muted); }
+.opt.go { background: var(--accent); color: #1c1405; border-color: var(--accent); font-weight: 700; text-align: center; letter-spacing: .04em; }
+
+/* Abertura */
+.cine {
+  position: fixed; inset: 0; z-index: 30; background: #050605; display: grid; place-items: center; cursor: pointer;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px));
+}
+.cine-in { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 16px; }
+.cine canvas { width: 100%; height: auto; aspect-ratio: 128 / 72; max-width: 100%; border-radius: 4px; }
+.cine-txt { font-size: 18px; line-height: 1.5; min-height: 6.2em; color: var(--fg); text-wrap: pretty; }
+.cine-bar { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; }
+.cine-dots { display: flex; gap: 6px; }
+.cine-dots i { width: 18px; height: 3px; background: var(--line); }
+.cine-dots i.on { background: var(--accent); }
+
+@media (max-width: 400px) {
+  .booth { grid-template-columns: 116px 1fr; }
+  .portrait-wrap { width: 116px; }
+  .exam { grid-template-columns: 1fr; }
+  .val { font-size: 21px; }
+}
+/* ---- Tela única: tudo cabe na altura do aparelho, sem rolagem ---- */
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+body { position: fixed; inset: 0; -webkit-text-size-adjust: 100%; -webkit-touch-callout: none; -webkit-user-select: none; }
+* { touch-action: manipulation; }
+#app { padding-top: max(8px, env(safe-area-inset-top, 0px)); padding-bottom: max(8px, env(safe-area-inset-bottom, 0px)); }
+#app { height: 100%; min-height: 0; gap: 6px; padding-block: 8px; overflow: hidden; }
+.hud, .base, .booth, .tools, .decide, .foot, .dlg, .choices { flex: none; }
+.hud { gap: 4px; }
+.hud-item { padding: 2px 6px; }
+.lbl { font-size: 9px; }
+.val { font-size: 20px; }
+.base { gap: 4px; }
+.base-item { padding: 3px 6px; gap: 2px; }
+.base-top { font-size: 9px; }
+.base-top b { font-size: 14px; }
+.base-sub { font-size: 10px; }
+#gate:not([hidden]), #mesa:not([hidden]) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+#gate .scene { flex: 1 1 auto; min-height: 0; }
+#gate .scene canvas { width: 100%; height: 100%; aspect-ratio: auto; object-fit: contain; }
+.dlg { min-height: 0; padding: 8px 12px; gap: 2px; }
+.dlg .txt { font-size: 15px; line-height: 1.35; min-height: 2.7em; }
+.choices { gap: 6px; }
+.opt { padding: 9px 12px; font-size: 14px; }
+.booth { padding: 8px; gap: 10px; grid-template-columns: auto 1fr; }
+.portrait-wrap { width: clamp(80px, 15vh, 136px); }
+.ident { gap: 3px; }
+.nome { font-size: 16px; }
+.info { font-size: 11px; }
+.chip { font-size: 10px; padding: 1px 6px; }
+.fala { margin-top: 2px; padding: 5px 8px; font-size: 13px; line-height: 1.3; }
+.exam { flex: 1 1 auto; min-height: 0; grid-template-columns: 1.45fr 1fr; gap: 6px; }
+.exam-view { aspect-ratio: auto; min-height: 0; height: 100%; }
+#ex { object-fit: contain; }
+.ex-msg { font-size: 18px; }
+.ficha { overflow-y: auto; min-height: 0; padding: 6px 8px; font-size: 12px; gap: 3px; }
+.ficha li.row b { font-size: 16px; }
+.tools { gap: 4px; }
+.tool { padding: 5px 2px 4px; font-size: 10px; gap: 2px; }
+.tool canvas { width: 22px; height: 22px; }
+.decide { gap: 8px; }
+.btn { padding: 11px 8px; font-size: 16px; }
+.link { font-size: 12px; padding: 0; }
+.card { padding: 16px; gap: 9px; }
+.card h2 { font-size: 22px; }
+.card p { font-size: 14px; line-height: 1.4; }
+.rules { gap: 5px; }
+.rules li { padding: 6px 9px; font-size: 13px; line-height: 1.35; }
+.stats div { padding: 6px 9px; }
+.stats b { font-size: 22px; }
+.report .r { padding: 5px 9px; font-size: 13px; }
+.report .r b { font-size: 18px; }
+.evento { padding: 5px 9px; font-size: 13px; }
+@media (max-width: 400px) {
+  .booth { grid-template-columns: auto 1fr; }
+  .portrait-wrap { width: clamp(76px, 14vh, 116px); }
+  .exam { grid-template-columns: 1.45fr 1fr; }
+}
+@media (max-height: 720px) {
+  #app { gap: 5px; padding-block: 6px; }
+  .base-sub { display: none; }
+  .fala { font-size: 12px; }
+  .opt { padding: 7px 10px; }
+  .btn { padding: 9px 8px; }
+  .tool canvas { width: 18px; height: 18px; }
+}
+.exam { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+.ficha { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; max-height: 3.4em; }
+.ficha .tit { width: 100%; }
+.ficha li.row { gap: 6px; }
+.scene { background: linear-gradient(#0c1222 50%, #22251f 50%); }
+@media (max-width: 400px) { .exam { grid-template-columns: 1fr; } }
+.atk {
+  position: fixed; inset: 0; z-index: 24; background: rgba(4,5,4,.9); display: grid; place-items: center;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  animation: atkIn .15s ease-out;
+}
+.atk canvas { width: 100%; max-width: 640px; height: auto; aspect-ratio: 128 / 72; border-radius: 4px; }
+.atk.shake canvas { animation: flinch .2s infinite; }
+@keyframes atkIn { from { opacity: 0; } }
+.tip {
+  position: fixed; z-index: 22; left: 50%; transform: translateX(-50%); width: min(420px, calc(100% - 32px));
+  background: #f1e6c8; color: #1c1a12; border-radius: 8px; padding: 12px 14px; box-shadow: 0 8px 30px rgba(0,0,0,.6);
+  display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.4; animation: atkIn .2s ease-out;
+}
+.tip b { color: #7a4a00; }
+.tip .tip-top { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #8a6a2a; display: flex; justify-content: space-between; }
+.tip button { align-self: flex-end; background: #1c1a12; color: #f1e6c8; border: 0; border-radius: 5px; padding: 7px 14px; font-weight: 700; font-size: 13px; }
+.tip .skip { background: none; color: #8a6a2a; padding: 0; font-weight: 400; text-decoration: underline; font-size: 11px; }
+.hl { outline: 3px solid var(--accent) !important; outline-offset: 2px; position: relative; z-index: 21; animation: hl 1s infinite alternate; }
+@keyframes hl { to { outline-color: rgba(227,168,59,.35); } }
+/* Abertura do estúdio */
+#splash { position: fixed; inset: 0; z-index: 40; background: #000; display: grid; place-items: center; cursor: pointer; }
+.sp-in { display: flex; flex-direction: column; align-items: center; gap: 16px; opacity: 0; animation: spIn 3.4s ease-in-out forwards; }
+.sp-in canvas { width: 88px; height: 88px; }
+.sp-word { font-family: var(--f-display); font-weight: 700; font-size: 30px; letter-spacing: .5em; margin-right: -.5em; color: #f2efe6; }
+.sp-sub { font-size: 11px; letter-spacing: .4em; margin-right: -.4em; text-transform: uppercase; color: #8a8a80; }
+@keyframes spIn { 0% { opacity: 0; transform: scale(.96); } 25% { opacity: 1; transform: scale(1); } 78% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .sp-in { animation-duration: 2.4s; } }
+.cine-title { display: flex; flex-direction: column; gap: 10px; }
+.cine-title h1 { margin: 0; font-family: var(--f-display); font-size: clamp(28px, 8vw, 40px); letter-spacing: .04em; text-transform: uppercase; color: var(--fg); }
+.cine-title span { font-size: 14px; color: var(--muted); }
+.cine-title b { color: var(--accent); font-weight: 700; animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .stamp { animation: none; } #cv { transition: none; } }
+</style>
+
+<div id="app">
+  <header class="hud">
+    <div class="hud-item"><span class="lbl">Dia</span><span id="hDia" class="val">1</span></div>
+    <div class="hud-item"><span class="lbl">Turno</span><span id="hTempo" class="val">0:00</span></div>
+    <div class="hud-item"><span class="lbl">Fila</span><span id="hFila" class="val">0</span></div>
+    <div class="hud-item"><span class="lbl">Pontos</span><span id="hPts" class="val">0</span></div>
+    <div class="hud-item"><span class="lbl">Erros</span><span id="hErros" class="val strikes">□□□</span></div>
+  </header>
+  <div id="base" class="base"></div>
+
+  <section id="gate" hidden>
+    <div class="scene"><canvas id="gv" width="128" height="72"></canvas><span class="tag">Portão Leste · Zona 7</span></div>
+    <div id="dlg" class="dlg">
+      <span id="dlgWho" class="who">Sobrevivente no portão</span>
+      <div id="dlgTxt" class="txt"></div>
+      <span id="dlgHint" class="hint">toque para pular ▸</span>
+    </div>
+    <div id="choices" class="choices"></div>
+  </section>
+
+  <div id="mesa" hidden>
+  <section class="booth">
+    <div class="portrait-wrap">
+      <canvas id="cv" width="48" height="48"></canvas>
+      <div id="stamp" class="stamp" hidden></div>
+    </div>
+    <div class="ident">
+      <div id="pNome" class="nome">Posto 7 — Portão Leste</div>
+      <div id="pInfo" class="info">Aguardando a fila</div>
+      <span id="pRole" class="chip" hidden></span>
+      <div class="agit">Agitação <span><i id="agit"></i></span></div>
+      <p id="pFala" class="fala">Próximo!</p>
+    </div>
+  </section>
+
+  <section class="exam">
+    <div class="exam-view">
+      <canvas id="ex" width="64" height="40"></canvas>
+      <div id="exMsg" class="ex-msg"></div>
+      <div class="scanbar"><i id="scan"></i></div>
+    </div>
+    <ul id="ficha" class="ficha"></ul>
+  </section>
+
+  <div id="tools" class="tools"></div>
+
+  <div class="decide">
+    <button id="bElim" class="btn danger" type="button">Eliminar</button>
+    <button id="bSalv" class="btn safe" type="button">Salvar</button>
+  </div>
+  </div>
+
+  <footer class="foot">
+    <button id="bManual" class="link" type="button">Manual do fiscal</button>
+    <span style="display:flex;gap:16px"><button id="bMus" class="link" type="button">Música: ligada</button><button id="bSom" class="link" type="button">Efeitos: ligados</button></span>
+  </footer>
+</div>
+
+<div id="splash"><div class="sp-in"><canvas id="spLogo" width="13" height="13"></canvas><div class="sp-word">VALTORE</div><div class="sp-sub">apresenta</div></div></div>
+<div id="cine" class="cine" hidden>
+  <div class="cine-in">
+    <canvas id="cc" width="128" height="72"></canvas>
+    <div id="ccTxt" class="cine-txt"></div>
+    <div class="cine-bar"><div id="ccDots" class="cine-dots"></div><button id="ccSkip" class="link" type="button">Pular abertura</button></div>
+  </div>
+</div>
+<div id="ov" class="ov" hidden><div id="ovCard" class="card"></div></div>
+<div id="toast" class="toast" hidden></div>
+<div id="tip" class="tip" hidden></div>
+<div id="atk" class="atk" hidden><canvas id="ak" width="128" height="72"></canvas></div>
+<canvas id="splat" width="120" height="220"></canvas>
+<div id="flash"></div>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const R = (a, b) => a + Math.random() * (b - a);
+const RI = (a, b) => Math.floor(R(a, b + 1));
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const chance = p => Math.random() < p;
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = RI(0, i); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const fmtT = v => v.toFixed(1).replace(".", ",") + " °C";
+
+function rng(seed) {
+  return () => {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = [n >> 16, n >> 8 & 255, n & 255].map(v => Math.round(f < 0 ? v * (1 + f) : v + (255 - v) * f));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+// ---------- Regras ----------
+const TOOLS = [
+  { id: "temp",    nome: "Termômetro", dia: 1, regra: "Febre de 38,0 °C ou mais é sinal de infecção. Até 37,9 °C pode passar." },
+  { id: "olhos",   nome: "Lanterna",   dia: 1, regra: "Parte branca do olho amarelada, com pupila que não diminui na luz, é infecção. Olho vermelho de cansaço é normal." },
+  { id: "bracos",  nome: "Braços",     dia: 2, regra: "Mordida (marca de dentes vermelha com roxo em volta) é infecção. Cicatriz clara e tatuagem são normais." },
+  { id: "pulso",   nome: "Pulso",      dia: 3, regra: "Pulso abaixo de 50 bpm é infecção. Pulso acelerado é só nervosismo." },
+  { id: "pescoco", nome: "Pescoço",    dia: 4, regra: "Veias escuras e arroxeadas subindo pelo pescoço são infecção. Colar e tatuagem são normais." },
+];
+const SIGN_TXT = {
+  temp: p => `febre de ${fmtT(p.temp)}`,
+  olhos: () => "olhos amarelados",
+  bracos: () => "uma mordida no braço",
+  pulso: p => `pulso de ${p.pulso} bpm`,
+  pescoco: () => "veias escuras no pescoço",
+};
+const SCAN_T = 0.9;
+
+// ---------- Pessoas ----------
+const NOMES_F = ["Ana", "Bruna", "Carla", "Dandara", "Elisa", "Fernanda", "Graça", "Helena", "Iara", "Joana", "Kátia", "Luana", "Marta", "Neide", "Olívia", "Priscila", "Rita", "Sônia", "Tereza", "Vitória"];
+const NOMES_M = ["André", "Bento", "Caio", "Davi", "Edson", "Fábio", "Gilberto", "Hugo", "Igor", "Jorge", "Luiz", "Márcio", "Nelson", "Otávio", "Paulo", "Raimundo", "Sérgio", "Tiago", "Valter", "Wesley"];
+const SOBRENOMES = ["Silva", "Souza", "Oliveira", "Santos", "Lima", "Pereira", "Costa", "Rocha", "Almeida", "Barbosa", "Ferreira", "Nunes", "Moura", "Cardoso", "Teixeira", "Ramos"];
+const PROFS = [
+  ["ferreiro", "ferreira", "muro"], ["soldador", "soldadora", "muro"],
+  ["agricultor", "agricultora", "comida"], ["cozinheiro", "cozinheira", "comida"],
+  ["médico", "médica", "saude"], ["enfermeiro", "enfermeira", "saude"],
+  ["eletricista", "eletricista", "energia"], ["mecânico", "mecânica", "energia"],
+];
+const COMUNS = [["professor", "professora"], ["motorista", "motorista"], ["estudante", "estudante"], ["vendedor", "vendedora"], ["costureiro", "costureira"], ["cantor", "cantora"]];
+const BASE = {
+  muro:    { nome: "Muro",    func: "Mantém o muro e o portão de pé", queda: d => 15 + d * 3, prod: 7 },
+  comida:  { nome: "Comida",  func: "Planta e cozinha para a zona",   queda: () => 11 + Math.floor(S.pop / 2), prod: 6 },
+  saude:   { nome: "Saúde",   func: "Cuida dos doentes e feridos",    queda: () => 11, prod: 5 },
+  energia: { nome: "Energia", func: "Mantém geradores e refletores",  queda: d => d >= 3 ? 20 : 11, prod: 6 },
+};
+const ORIGENS = ["Setor Norte", "Vila Industrial", "Bairro do Porto", "Rodovia 116", "Centro antigo", "Zona rural", "Hospital Regional", "Estação de trem"];
+const FALAS = [
+  "Andei três dias até chegar aqui.", "Minha filha já passou pelo portão ontem.", "Pode examinar, não tenho nada.",
+  "Faz dois dias que eu não como direito.", "Só quero dormir num lugar seguro.", "Eu era voluntário no abrigo antigo.",
+  "Perdi meus documentos na estrada.", "Tô com frio, mas é a chuva.", "Por favor, seja rápido.",
+  "Me escondi num mercado a semana toda.", "Eu vi o que acontece com quem fica lá fora.", "Tenho remédio de pressão, só isso.",
+  "Vim com um grupo, mas me perdi deles.", "Juro que ninguém me tocou.", "Só arranhei o braço numa cerca.",
+  "Meu coração tá disparado, desculpa.", "Não durmo há dias.", "Você vai me deixar entrar, né?",
+];
+const PELES = ["#f1c9a5", "#e0ac83", "#c68a5e", "#a8693f", "#7d4a2a", "#5c3420"];
+const CABELOS = ["#1d1611", "#3b2416", "#6a4423", "#a0743b", "#c9b48a", "#8d8b86"];
+const ROUPAS = ["#4f6d7a", "#7a4f4f", "#5b7a4f", "#6b5b7a", "#8a7a4a", "#3d4a5c", "#9a5b3a", "#4a5a4a"];
+const IRIS = ["#5a3a1e", "#3a6a8a", "#4a7a4a", "#2a1a10", "#7a6a3a"];
+const ESTILOS = ["curto", "longo", "careca", "bone", "cacheado", "coque"];
+
+function makePerson(day) {
+  const unlocked = TOOLS.filter(t => t.dia <= day).map(t => t.id);
+  const infected = chance(Math.min(0.38 + day * 0.02, 0.5));
+  let signs = [];
+  if (infected) {
+    const n = day <= 2 ? RI(1, 2) : (chance(day >= 6 ? 0.85 : 0.65) ? 1 : 2);
+    signs = shuffle(unlocked.slice()).slice(0, Math.min(n, unlocked.length));
+  }
+  const has = id => signs.includes(id);
+  const dist = () => day >= 2 && chance(Math.min(0.12 + day * 0.06, 0.45));
+  const fem = chance(0.5);
+  const idade = RI(17, 74);
+  const p = {
+    seed: RI(1, 1e9), infected, signs, fem, idade,
+    nome: `${pick(fem ? NOMES_F : NOMES_M)} ${pick(SOBRENOMES)}`,
+    ...(() => {
+      if (idade > 64 && chance(.6)) return { oficio: fem ? "aposentada" : "aposentado", role: null };
+      if (chance(.55)) { const r = pick(PROFS); return { oficio: r[fem ? 1 : 0], role: r[2] }; }
+      const c = pick(COMUNS); return { oficio: c[fem ? 1 : 0], role: null };
+    })(),
+    origem: pick(ORIGENS), fala: pick(FALAS),
+    pele: pick(PELES), cabelo: idade > 60 && chance(.6) ? "#b9b6ae" : pick(CABELOS),
+    roupa: pick(ROUPAS), iris: pick(IRIS),
+    estilo: fem ? pick(["longo", "coque", "cacheado", "curto", "bone"]) : pick(ESTILOS),
+    barba: !fem && chance(.35), oculos: chance(.18),
+  };
+  p.temp = has("temp") ? R(38.2, 40.2) : dist() ? R(37.6, 37.9) : R(36.0, 37.4);
+  p.olhos = has("olhos") ? "amarelo" : dist() ? "vermelho" : "normal";
+  p.bracos = has("bracos") ? "mordida" : dist() ? pick(["cicatriz", "tatuagem"]) : "limpo";
+  p.pulso = has("pulso") ? RI(28, 46) : dist() ? RI(112, 128) : RI(62, 98);
+  p.pescoco = has("pescoco") ? "veias" : dist() ? pick(["colar", "tatuagem"]) : "limpo";
+  return p;
+}
+
+// ---------- Desenho ----------
+function painter(ctx) {
+  return (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+}
+function disc(px, cx, cy, r, c, inside) {
+  for (let y = Math.floor(cy - r); y <= cy + r; y++)
+    for (let x = Math.floor(cx - r); x <= cx + r; x++)
+      if ((x + .5 - cx) ** 2 + (y + .5 - cy) ** 2 <= r * r && (!inside || inside(x, y))) px(x, y, 1, 1, c);
+}
+
+const cv = $("#cv"), cx = cv.getContext("2d"), P = painter(cx);
+function drawPortrait(p, t) {
+  P(0, 0, 48, 48, "#2b3127");
+  for (let y = 4; y < 48; y += 6) P(0, y, 48, 1, "#343b2f");
+  for (let y = 4; y < 48; y += 12) P(0, y, 4, 1, "#596349");
+  if (!p) {
+    P(16, 14, 16, 22, "#22281f"); P(10, 34, 28, 14, "#22281f");
+    return;
+  }
+  const bob = Math.sin(t * 2 + p.seed) > .6 ? 1 : 0;
+  const sk = p.pele, skD = shade(sk, -.18), hair = p.cabelo;
+  const o = bob + Math.floor(p.fall || 0);
+  if (p.shot) {
+    const r = rng(p.seed + 99);
+    for (let i = 0; i < 26; i++) { const a = r() * 6.28, d = r() * 14; P(Math.round(26 + Math.cos(a) * d), Math.round(16 + Math.sin(a) * d * .8), 1 + (r() * 2 | 0), 1 + (r() * 2 | 0), r() < .5 ? "#7e0d0d" : "#a3161a"); }
+    for (let i = 0; i < 5; i++) { const x = 18 + (r() * 16 | 0), y = 14 + (r() * 8 | 0); P(x, y, 1, Math.min(14, Math.floor((p.fall || 0) * .8) + 2), "#7e0d0d"); }
+  }
+  // corpo
+  P(8, 38 + o, 32, 10, p.roupa); P(7, 40 + o, 34, 8, p.roupa);
+  P(8, 38 + o, 32, 1, shade(p.roupa, .15));
+  P(20, 31 + o, 8, 8, skD); P(21, 38 + o, 6, 2, skD);
+  // cabeça
+  if (p.estilo === "longo") P(13, 12 + o, 22, 20, hair);
+  P(16, 10 + o, 16, 1, sk); P(15, 11 + o, 18, 20, sk); P(16, 31 + o, 16, 1, sk);
+  P(30, 12 + o, 3, 19, skD); P(14, 19 + o, 1, 4, skD); P(33, 19 + o, 1, 4, skD);
+  // cabelo
+  const H = (x, y, w, h) => P(x, y + o, w, h, hair);
+  switch (p.estilo) {
+    case "curto": H(15, 8, 18, 4); H(15, 12, 2, 5); H(31, 12, 2, 5); break;
+    case "longo": H(14, 7, 20, 5); H(14, 12, 3, 8); H(31, 12, 3, 8); break;
+    case "cacheado": H(12, 4, 24, 9); H(12, 12, 4, 10); H(32, 12, 4, 10);
+      for (let i = 0; i < 6; i++) P(13 + i * 4, 4 + o, 2, 1, shade(hair, .12)); break;
+    case "coque": H(15, 8, 18, 4); H(21, 4, 6, 4); H(15, 12, 2, 3); H(31, 12, 2, 3); break;
+    case "bone": { const c = shade(p.roupa, -.25);
+      P(14, 7 + o, 20, 5, c); P(14, 12 + o, 22, 2, shade(c, -.2)); H(15, 14, 2, 3); H(31, 14, 2, 3); break; }
+    case "careca": P(18, 12 + o, 3, 1, shade(sk, .18)); break;
+  }
+  // rosto
+  P(18, 18 + o, 4, 1, shade(hair, -.2)); P(26, 18 + o, 4, 1, shade(hair, -.2));
+  const blink = (t * 1.3 + p.seed % 7) % 4 < .12;
+  if (blink) { P(18, 21 + o, 4, 1, skD); P(26, 21 + o, 4, 1, skD); }
+  else {
+    P(18, 20 + o, 4, 2, "#efeadc"); P(26, 20 + o, 4, 2, "#efeadc");
+    P(20, 20 + o, 2, 2, p.iris); P(28, 20 + o, 2, 2, p.iris);
+    P(20, 21 + o, 1, 1, "#111"); P(28, 21 + o, 1, 1, "#111");
+  }
+  if (p.oculos) {
+    const g = "#20201c"; P(17, 19 + o, 6, 1, g); P(25, 19 + o, 6, 1, g); P(17, 22 + o, 6, 1, g); P(25, 22 + o, 6, 1, g);
+    P(17, 19 + o, 1, 4, g); P(22, 19 + o, 1, 4, g); P(25, 19 + o, 1, 4, g); P(30, 19 + o, 1, 4, g); P(23, 20 + o, 2, 1, g);
+  }
+  P(24, 22 + o, 1, 3, skD); P(23, 25 + o, 3, 1, skD);
+  if (p.barba) { const b = shade(hair, -.1); P(16, 26 + o, 16, 5, b); P(18, 31 + o, 12, 1, b); P(21, 27 + o, 6, 1, shade(sk, -.35)); }
+  else P(21, 27 + o, 6, 1, shade(sk, -.35));
+  if (p.idade > 55) { P(17, 23 + o, 2, 1, skD); P(29, 23 + o, 2, 1, skD); }
+  if (p === S.cur && S.phase === "lunge") {
+    P(18, 20 + o, 4, 2, "#e8d040"); P(26, 20 + o, 4, 2, "#e8d040"); P(20, 20 + o, 1, 2, "#300"); P(28, 20 + o, 1, 2, "#300");
+    P(17, 18 + o, 5, 1, "#2a1010"); P(26, 18 + o, 5, 1, "#2a1010");
+    P(20, 26 + o, 8, 4, "#3a0808"); P(21, 26 + o, 1, 1, "#e9e5d3"); P(26, 26 + o, 1, 1, "#e9e5d3");
+    for (let i = 0; i < 4; i++) P(16 + i * 5, 28 + o + (i % 2), 1, 4, "#4a2a52");
+  }
+  if (p.shot) {
+    P(23, 15 + o, 3, 3, "#5a0606"); P(24, 16 + o, 1, 1, "#1a0000");
+    P(22, 18 + o, 1, 5, "#8e1010"); P(25, 18 + o, 1, 8, "#8e1010");
+    P(14, 40 + o, 20, 6, "rgba(120,10,12,.75)");
+  }
+}
+
+const ex = $("#ex"), ec = ex.getContext("2d"), E = painter(ec);
+function drawExam(p, view, t, since) {
+  E(0, 0, 64, 40, "#0f1a12");
+  if (!p || !view) {
+    for (let y = 0; y < 40; y += 2) E(0, y, 64, 1, "#122016");
+    return;
+  }
+  const r = rng(p.seed + view.length);
+  const sk = p.pele, skD = shade(sk, -.2), skL = shade(sk, .15);
+  if (view === "temp") {
+    for (let y = 0; y < 40; y += 2) E(0, y, 64, 1, "#122016");
+    E(28, 3, 8, 28, "#d9dccf"); E(29, 4, 6, 26, "#26302a");
+    disc(E, 32, 33, 5, "#d9dccf"); disc(E, 32, 33, 4, "#d23a2a");
+    const lvl = Math.max(0, Math.min(1, (p.temp - 34) / 8)) * Math.min(1, since * 1.6);
+    const hgt = Math.round(lvl * 25);
+    E(30, 30 - hgt, 4, hgt + 1, "#d23a2a");
+    for (let d = 34; d <= 42; d++) { const y = 30 - Math.round((d - 34) / 8 * 25); E(37, y, d % 2 ? 2 : 4, 1, "#8fe39b"); }
+  } else if (view === "pulso") {
+    for (let x = 0; x < 64; x += 8) E(x, 0, 1, 40, "#132619");
+    for (let y = 0; y < 40; y += 8) E(0, y, 64, 1, "#132619");
+    const per = 60 / p.pulso, speed = 28; // px/s
+    const off = (t * speed) % (per * speed);
+    let prev = 22;
+    for (let x = 0; x < 64; x++) {
+      const ph = ((x + off) % (per * speed));
+      let y = 22;
+      if (ph > 10 && ph < 12) y = 19; else if (ph >= 12 && ph < 13) y = 6;
+      else if (ph >= 13 && ph < 14) y = 32; else if (ph >= 14 && ph < 15) y = 24;
+      else if (ph > 20 && ph < 24) y = 20;
+      const a = Math.min(prev, y), b = Math.max(prev, y);
+      E(x, a, 1, b - a + 1, "#8fe39b"); prev = y;
+    }
+  } else if (view === "olhos") {
+    E(0, 0, 64, 40, sk);
+    const inEye = (x, y) => { const k = (x - 8) / 48; if (k < 0 || k > 1) return false; return Math.abs(y + .5 - 20) < 15 * Math.sin(Math.PI * k); };
+    const scl = p.olhos === "amarelo" ? "#d6c046" : "#f0ece0";
+    for (let y = 0; y < 40; y++) for (let x = 0; x < 64; x++) if (inEye(x, y)) E(x, y, 1, 1, scl);
+    if (p.olhos === "vermelho") for (let i = 0; i < 9; i++) {
+      let x = r() < .5 ? RIr(r, 10, 20) : RIr(r, 44, 54), y = RIr(r, 14, 26);
+      for (let s = 0; s < 6; s++) { if (inEye(x, y)) E(x, y, 1, 1, "#c8433a"); x += x < 32 ? 1 : -1; y += Math.round(r() * 2 - 1); }
+    }
+    if (p.olhos === "amarelo") for (let i = 0; i < 14; i++) { const x = RIr(r, 10, 54), y = RIr(r, 10, 30); if (inEye(x, y)) E(x, y, 1, 1, "#a8902a"); }
+    disc(E, 32, 20, 10, p.iris, inEye); disc(E, 32, 20, 10, "rgba(0,0,0,.18)", (x, y) => inEye(x, y) && y < 15);
+    const pr = p.olhos === "amarelo" ? 6.5 : Math.max(2.5, 6.5 - since * 5);
+    disc(E, 32, 20, pr, "#0b0b0b", inEye);
+    E(35, 15, 2, 2, "#ffffff");
+    for (let x = 8; x < 57; x++) { const k = (x - 8) / 48, h = 15 * Math.sin(Math.PI * k); E(x, Math.round(20 - h) - 1, 1, 2, skD); }
+  } else if (view === "bracos") {
+    E(0, 0, 64, 40, "#1d241c");
+    E(0, 7, 64, 26, sk); E(0, 7, 64, 2, skL); E(0, 29, 64, 4, skD);
+    for (let i = 0; i < 30; i++) E(RIr(r, 0, 63), RIr(r, 10, 27), 1, 1, shade(sk, -.08));
+    const cx0 = RIr(r, 22, 42), cy0 = 19;
+    if (p.bracos === "mordida") {
+      disc(E, cx0, cy0, 9, "rgba(96,40,92,.45)"); disc(E, cx0, cy0, 6, "rgba(150,40,50,.4)");
+      for (let a = 0; a < 7; a++) {
+        const ang = Math.PI * (0.12 + a * 0.127);
+        E(Math.round(cx0 - 6 * Math.cos(ang)), Math.round(cy0 - 4 * Math.sin(ang)) - 1, 2, 2, "#7e1414");
+        E(Math.round(cx0 - 6 * Math.cos(ang)), Math.round(cy0 + 4 * Math.sin(ang)), 2, 2, "#7e1414");
+      }
+    } else if (p.bracos === "cicatriz") {
+      for (let i = 0; i < 16; i++) E(cx0 - 8 + i, cy0 + Math.round(i * .3) - 2, 1, 1, shade(sk, .35));
+      for (let i = 0; i < 4; i++) E(cx0 - 6 + i * 4, cy0 - 4 + Math.round(i * 1.2), 1, 4, shade(sk, .25));
+    } else if (p.bracos === "tatuagem") {
+      const c = "#243a5a";
+      E(cx0 - 3, cy0 - 5, 2, 2, c); E(cx0 + 1, cy0 - 5, 2, 2, c); E(cx0 - 4, cy0 - 4, 8, 3, c);
+      E(cx0 - 3, cy0 - 1, 6, 2, c); E(cx0 - 2, cy0 + 1, 4, 1, c); E(cx0 - 1, cy0 + 2, 2, 1, c);
+    }
+  } else if (view === "pescoco") {
+    E(0, 0, 64, 40, sk); E(0, 0, 64, 5, skD); E(0, 5, 64, 1, shade(sk, -.1));
+    E(0, 33, 64, 7, p.roupa); E(22, 30, 20, 3, p.roupa); E(26, 28, 12, 2, p.roupa); E(28, 33, 8, 3, skD);
+    if (p.pescoco === "veias") {
+      for (let b = 0; b < 4; b++) {
+        let x = RIr(r, 12, 52), y = 30;
+        while (y > 6) {
+          E(x, y, 1, 2, "#3b1d45"); if (r() < .5) E(x + 1, y, 1, 1, "#6a3a74");
+          if (r() < .18) { let bx = x, by = y; for (let k = 0; k < 6; k++) { bx += r() < .5 ? -1 : 1; by--; E(bx, by, 1, 1, "#5a2c63"); } }
+          x += Math.round(r() * 2 - 1); y -= 1;
+        }
+      }
+    } else if (p.pescoco === "colar") {
+      for (let x = 8; x < 56; x += 2) E(x, Math.round(14 + 10 * Math.sin(Math.PI * (x - 8) / 48)), 1, 1, "#d8b04a");
+      E(31, 24, 3, 4, "#d8b04a");
+    } else if (p.pescoco === "tatuagem") {
+      const c = "#243a5a", x0 = RIr(r, 14, 44), y0 = 14;
+      E(x0 + 2, y0, 1, 7, c); E(x0 - 1, y0 + 3, 7, 1, c); E(x0, y0 + 1, 1, 1, c); E(x0 + 4, y0 + 1, 1, 1, c); E(x0, y0 + 5, 1, 1, c); E(x0 + 4, y0 + 5, 1, 1, c);
+    }
+  }
+}
+function RIr(r, a, b) { return a + Math.floor(r() * (b - a + 1)); }
+
+function toolIcon(id) {
+  const c = document.createElement("canvas"); c.width = c.height = 14;
+  const k = painter(c.getContext("2d")), g = "#e9e5d3", a = "#e3a83b";
+  if (id === "temp") { k(6, 1, 3, 9, g); k(7, 2, 1, 7, a); k(5, 10, 5, 3, a); }
+  if (id === "olhos") { k(2, 6, 10, 2, g); k(3, 5, 8, 4, g); k(5, 4, 4, 6, a); k(6, 6, 2, 2, "#171a16"); }
+  if (id === "bracos") { k(1, 5, 12, 5, g); k(5, 6, 1, 1, a); k(7, 6, 1, 1, a); k(5, 8, 1, 1, a); k(7, 8, 1, 1, a); }
+  if (id === "pulso") { k(0, 7, 4, 1, g); k(4, 3, 1, 4, a); k(5, 7, 1, 4, a); k(6, 7, 8, 1, g); }
+  if (id === "pescoco") { k(4, 1, 6, 6, g); k(5, 7, 4, 3, g); k(2, 10, 10, 3, a); }
+  return c;
+}
+
+// ---------- Conversa no portão ----------
+function pitchFor(p) {
+  const eu = p.nome.split(" ")[0];
+  const arq = [
+    () => [`Meu nome é ${eu}. Meu filho de seis anos tá escondido ali atrás do carro.`, "Ele não come há dois dias. Por favor, abre esse portão."],
+    () => [`Eu sou ${p.oficio}. Vocês vão precisar de gente como eu aí dentro.`, "Posso trabalhar hoje mesmo. Só me deixa entrar."],
+    () => ["Olha... eu tenho isso aqui.", "(mostra um relógio de ouro pela grade)", "É seu. Ninguém precisa saber que eu passei rápido."],
+    () => [`Eu tenho ${p.idade} anos.`, "Já enterrei gente demais nessa estrada. Não quero ser o próximo."],
+    () => ["Abre logo isso! Tô aqui fora faz horas!", "Quem te deu o direito de decidir quem vive?"],
+    () => [`Me chamo ${eu}. Minha irmã entrou na semana passada.`, "Pergunta por ela lá dentro. Ela vai dizer que eu sou de confiança."],
+    () => ["Por favor, por favor... eles estão vindo pela rodovia.", "Ouvi gritos a noite inteira. Eu não aguento mais uma noite lá fora."],
+    () => [`Vim andando de ${p.origem} até aqui.`, "Disseram no rádio que a Zona 7 ainda aceita gente. É verdade, né?"],
+  ];
+  if (p.role && chance(.6)) return [
+    `Eu sou ${p.oficio}! Vocês vão precisar de mim aí dentro.`,
+    { muro: "Esse portão tá enferrujando. Eu conserto isso em dois dias.", comida: "Eu sei plantar em qualquer chão. Ninguém passa fome comigo.",
+      saude: "Quantos doentes vocês têm aí? Eu posso cuidar deles.", energia: "Seus refletores tão piscando. É o gerador. Eu resolvo." }[p.role],
+  ];
+  return pick(arq)();
+}
+function answerFor(p, k) {
+  const lie = chance(.5);
+  if (k === "mordida") {
+    if (p.infected && !lie) return pick(["Mordido? N-não... foi só um arranhão.", "Por que você tá perguntando isso?", "...Não. Acho que não."]);
+    if (p.bracos === "cicatriz") return "Essa marca no braço é antiga. Acidente de moto, antes de tudo isso.";
+    return pick(["Não. Ninguém encostou em mim.", "Não! Pode olhar o que quiser.", "Nunca. Eu corro rápido."]);
+  }
+  if (p.infected && !lie) return pick(["Com frio... muito frio. É normal, né?", "Meus olhos ardem com essa luz. Dá pra apagar?", "Tô bem. Só com uma sede que não passa."]);
+  if (p.temp >= 37.6) return "Meio quente. Peguei chuva a noite toda.";
+  if (p.pulso > 108) return "Meu coração tá disparado. Desculpa, é que eu tô com muito medo.";
+  return pick(["Cansado e com fome. Só isso.", "Com medo. Mas bem.", "Melhor agora que achei vocês."]);
+}
+const PERGUNTAS = { mordida: "Você foi mordido?", sentindo: "Como você está se sentindo?" };
+
+function gateStart(p) {
+  S.phase = "gate";
+  S.g = { lines: pitchFor(p), li: 0, shown: 0, mode: "fala", asked: {}, walk: 0, me: false, wait: 0 };
+  S.agit = 0;
+  $("#pFala").textContent = `“${S.g.lines[S.g.lines.length - 1]}”`;
+  $("#mesa").hidden = true; $("#gate").hidden = false;
+  $("#choices").dataset.key = "";
+  renderGate();
+}
+function gateShake() {
+  const L = gateLine();
+  if (!L.includes("!")) return;
+  const sc = $(".scene"); sc.classList.remove("shake"); void sc.offsetWidth; sc.classList.add("shake");
+  noise(.25, 900, 1, .25);
+}
+function gateLine() { return S.g.lines[S.g.li] || ""; }
+function gateTap() {
+  if (S.phase !== "gate") return;
+  const g = S.g, L = gateLine();
+  if (g.shown < L.length) { g.walk = 1; g.shown = L.length; return renderGate(); }
+  if (g.li < g.lines.length - 1) { g.li++; g.shown = 0; g.wait = 0; beep(300, .03, "square", .02); gateShake(); return renderGate(); }
+  if (g.mode !== "menu") { g.mode = "menu"; renderGate(); }
+}
+function gateAsk(k) {
+  const g = S.g; g.asked[k] = true; g.mode = "fala"; g.me = true;
+  g.lines = [PERGUNTAS[k], answerFor(S.cur, k)]; g.li = 0; g.shown = 0; g.wait = 0; g.walk = 1;
+  renderGate();
+}
+function toExam() {
+  if (S.phase !== "gate") return;
+  $("#gate").hidden = true; $("#mesa").hidden = false;
+  S.phase = "play"; beep(520, .06); beep(780, .08);
+  renderTools(); renderHUD();
+  if (TUT.steps.length) tutEvent("triagem");
+  else if (S.idx === 0 && S.day > 1) setTimeout(tutNovidades, 50);
+}
+function renderGate() {
+  const g = S.g, L = gateLine(), done = g.shown >= L.length;
+  const isMe = g.me && g.li === 0;
+  $("#dlgWho").textContent = isMe ? "Você" : "Sobrevivente no portão";
+  $("#dlgTxt").className = "txt" + (isMe ? " me" : "");
+  $("#dlgTxt").textContent = L.slice(0, Math.floor(g.shown));
+  $("#dlgHint").style.visibility = g.mode === "menu" ? "hidden" : "visible";
+  const ch = $("#choices");
+  const key = Object.keys(g.asked).join() || "-";
+  if (ch.dataset.key === key) return;
+  ch.dataset.key = key; ch.innerHTML = "";
+  for (const k in PERGUNTAS) if (!g.asked[k]) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "opt";
+    b.textContent = "Perguntar: “" + PERGUNTAS[k] + "”"; b.onclick = () => gateAsk(k); ch.append(b);
+  }
+  const go = document.createElement("button"); go.type = "button"; go.className = "opt go";
+  go.textContent = "Levar para a triagem"; go.onclick = toExam; ch.append(go);
+}
+$("#dlg").onclick = gateTap;
+
+// ---------- Cenas ----------
+const gv = $("#gv"), G = painter(gv.getContext("2d"));
+const cc = $("#cc"), C = painter(cc.getContext("2d"));
+const SKY = (() => { const r = rng(7), a = []; let x = 0; while (x < 128) { const w = 4 + Math.floor(r() * 9); a.push([x, w, 6 + Math.floor(r() * 18)]); x += w; } return a; })();
+
+function sky(K, top, bot) {
+  for (let y = 0; y < 72; y++) K(0, y, 128, 1, y < 36 ? top : bot);
+}
+function skyline(K, t, base, col, fire) {
+  for (const [x, w, h] of SKY) {
+    K(x, base - h, w - 1, h, col);
+    for (let wy = base - h + 2; wy < base - 1; wy += 3) for (let wx = x + 1; wx < x + w - 2; wx += 2)
+      if (((wx * 7 + wy * 13) % 11) < (fire ? 3 : 1)) K(wx, wy, 1, 1, fire ? (Math.sin(t * 6 + wx + wy) > 0 ? "#e8762a" : "#b8401c") : "#d8c97a");
+  }
+}
+function rain(K, t, n, col) {
+  for (let i = 0; i < n; i++) {
+    const x = (i * 37 + Math.floor(t * 14)) % 132 - 2, y = (i * 53 + Math.floor(t * 110)) % 80 - 6;
+    K(x, y, 1, 3, col);
+  }
+}
+function containers(K, x0, w, base, rows) {
+  const cols = ["#7a3524", "#2e4d6b", "#3f5a35", "#8a6a2a", "#5a2e3a"];
+  for (let r = 0; r < rows; r++) {
+    const c = cols[(r * 3 + x0) % cols.length], y = base - (r + 1) * 9;
+    K(x0, y, w, 9, c); K(x0, y, w, 1, shade(c, .15)); K(x0, y + 8, w, 1, shade(c, -.35));
+    for (let x = x0 + 2; x < x0 + w - 1; x += 3) K(x, y + 2, 1, 5, shade(c, -.2));
+  }
+}
+function person(K0, p, x0, b0, t, walking, sc = 1) {
+  const K = (X, Y, w, h, c) => K0(x0 + X * sc, b0 + Y * sc, w * sc, h * sc, c), x = 0, base = 0;
+  const sk = p.pele, roupa = p.roupa, calca = shade(roupa, -.55), hair = p.cabelo;
+  const step = walking ? Math.floor(t * 8) % 2 : 0;
+  K(x - 3, base - 12, 2, 12 - step, calca); K(x + 1, base - 12, 2, 12 - (walking ? 1 - step : 0), calca);
+  K(x - 4, base - 1, 3, 1, "#111"); K(x + 1, base - 1, 3, 1, "#111");
+  K(x - 4, base - 24, 8, 12, roupa); K(x - 4, base - 24, 8, 1, shade(roupa, .2));
+  K(x - 6, base - 23, 2, 9, shade(roupa, -.15)); K(x + 4, base - 23, 2, 9, shade(roupa, -.15));
+  K(x - 6, base - 14, 2, 2, sk); K(x + 4, base - 14, 2, 2, sk);
+  K(x - 1, base - 26, 2, 2, shade(sk, -.2));
+  K(x - 3, base - 34, 6, 8, sk); K(x + 2, base - 33, 1, 6, shade(sk, -.18));
+  switch (p.estilo) {
+    case "longo": K(x - 4, base - 35, 8, 3, hair); K(x - 4, base - 32, 2, 8, hair); K(x + 2, base - 32, 2, 8, hair); break;
+    case "cacheado": K(x - 5, base - 37, 10, 5, hair); K(x - 5, base - 32, 2, 4, hair); K(x + 3, base - 32, 2, 4, hair); break;
+    case "coque": K(x - 3, base - 35, 6, 2, hair); K(x - 1, base - 37, 3, 2, hair); break;
+    case "bone": K(x - 4, base - 35, 7, 3, shade(roupa, -.3)); K(x - 5, base - 33, 3, 1, shade(roupa, -.45)); break;
+    case "careca": break;
+    default: K(x - 3, base - 35, 6, 2, hair);
+  }
+  if (p.barba) K(x - 3, base - 29, 6, 3, shade(hair, -.1));
+  K(x - 2, base - 31, 1, 1, "#111"); K(x + 1, base - 31, 1, 1, "#111");
+}
+function gateScene(K, t, p, walk, o = {}) {
+  sky(K, "#0c1222", "#121a2c");
+  skyline(K, t, 46, "#0a0e18", false);
+  for (let y = 46; y < 72; y++) K(0, y, 128, 1, y < 50 ? "#1a1d1a" : "#22251f");
+  for (let i = 0; i < 6; i++) K(20 + i * 18, 60 + (i % 2) * 5, 9, 1, "#31394a");
+  for (let y = 10; y < 72; y++) { const half = (y - 10) * .55; K(Math.round(64 - half), y, Math.round(half * 2), 1, "rgba(255,226,140,.07)"); }
+  if (p) person(K, p, Math.round(64 + (1 - walk) * 90) + (o.dx || 0), 89 + (walk < 1 ? Math.floor(t * 8) % 2 : 0) + (o.db || 0), t, walk < 1, 2);
+  if (o.mid) o.mid(K);
+  containers(K, 0, 26, 66, 6); containers(K, 102, 26, 66, 6);
+  K(26, 12, 3, 56, "#555b52"); K(99, 12, 3, 56, "#555b52"); K(26, 12, 76, 2, "#555b52"); K(26, 66, 76, 2, "#4a4f47");
+  for (let y = 15; y < 66; y += 4) for (let x = 29; x < 99; x += 4) K(x + (y / 4 % 2 ? 2 : 0), y, 1, 1, "rgba(160,170,160,.45)");
+  for (let x = 26; x < 102; x += 2) K(x, 9 + (x % 4 ? 1 : 0), 1, 2, "#6b706a");
+  if (p && walk >= 1 && !o.noHands) { const sk = p.pele, j = Math.sin(t * 20) > .7 ? 1 : 0; K(48, 40 + j, 5, 4, sk); K(75, 40 - j, 5, 4, sk); K(48, 41 + j, 5, 1, shade(sk, -.25)); K(75, 41 - j, 5, 1, shade(sk, -.25)); }
+  K(60, 4, 9, 4, "#3a3f38"); K(61, 8, 7, 1, "#ffe38c");
+  rain(K, t, 70, "rgba(150,170,210,.45)");
+}
+
+const CINE = [
+  { txt: "Março de 2031. Um navio cargueiro atracou no porto de Santos sem ninguém no comando. A tripulação estava trancada nos porões.",
+    draw: (K, t) => {
+      sky(K, "#101828", "#0d1520");
+      for (let y = 44; y < 72; y++) K(0, y, 128, 1, y % 3 ? "#0e2234" : "#123049");
+      K(20, 34, 70, 10, "#1b1f24"); K(26, 26, 18, 8, "#23282e"); K(30, 22, 4, 4, "#23282e"); K(84, 36, 10, 8, "#1b1f24");
+      for (let i = 0; i < 4; i++) K(48 + i * 9, 28, 7, 6, ["#7a3524", "#2e4d6b", "#3f5a35", "#8a6a2a"][i]);
+      K(104, 10, 2, 34, "#2a2f28"); K(96, 10, 20, 2, "#2a2f28");
+      if (Math.sin(t * 5) > 0) K(115, 9, 2, 2, "#ff3b2f");
+      rain(K, t, 30, "rgba(150,170,210,.3)");
+    } },
+  { txt: "Em uma semana, os hospitais lotaram. Febre alta, olhos amarelos, veias escuras no pescoço. Os jornais chamaram de Febre Âmbar.",
+    draw: (K, t) => {
+      K(0, 0, 128, 72, "#14110d");
+      K(24, 8, 80, 52, "#2a2620"); K(28, 12, 72, 42, "#0e1410");
+      for (let y = 12; y < 54; y += 2) K(28, y, 72, 1, "rgba(120,200,140,.06)");
+      for (let i = 0; i < 90; i++) K(28 + Math.floor(Math.random() * 72), 12 + Math.floor(Math.random() * 42), 1, 1, "rgba(200,220,200,.2)");
+      K(54, 18, 20, 20, "#d6c046"); K(60, 24, 8, 8, "#3a2a10"); K(62, 26, 4, 4, "#0b0b0b");
+      K(28, 44, 72, 7, "#b3261e"); for (let x = 31; x < 97; x += 4) K(x, 46, 2, 3, "#f3d6d0");
+      K(58, 60, 12, 4, "#2a2620"); K(48, 64, 32, 2, "#2a2620");
+    } },
+  { txt: "Uma mordida bastava. Em poucas horas, a pessoa deixava de ser quem era. As grandes cidades caíram em seis semanas.",
+    draw: (K, t) => {
+      sky(K, "#2a1410", "#3a1a10");
+      for (let y = 20; y < 50; y++) K(0, y, 128, 1, `rgba(232,118,42,${(y - 20) / 160})`);
+      skyline(K, t, 58, "#0d0807", true);
+      for (let i = 0; i < 26; i++) { const x = (i * 23) % 128, y = 50 - ((t * 8 + i * 9) % 50); K(x + Math.round(Math.sin(t + i) * 2), Math.round(y), 3, 2, "rgba(60,50,48,.55)"); }
+      for (let y = 58; y < 72; y++) K(0, y, 128, 1, "#120c0a");
+    } },
+  { txt: "Quem sobrou levantou Zonas de Quarentena: muros de contêineres, um portão e uma única regra. Nenhum infectado entra.",
+    draw: (K, t) => {
+      sky(K, "#0c1222", "#111a2b");
+      for (let y = 60; y < 72; y++) K(0, y, 128, 1, "#1a1d1a");
+      containers(K, 0, 128, 62, 4);
+      K(56, 8, 3, 18, "#3a3f38"); K(70, 8, 3, 18, "#3a3f38"); K(53, 4, 23, 6, "#2c312b"); K(55, 2, 19, 2, "#3a3f38");
+      const a = Math.sin(t * .8) * .9;
+      for (let i = 0; i < 70; i++) { const x = 64 + Math.sin(a) * i * 1.4, y = 8 + Math.cos(a) * i * .9; K(Math.round(x), Math.round(y), 2 + Math.floor(i / 12), 1, "rgba(255,230,150,.12)"); }
+      K(62, 6, 4, 3, "#ffe38c");
+    } },
+  { txt: "A Zona 7 abriga 4.000 pessoas. Lá fora, milhares querem entrar. Alguns estão doentes e não sabem. Outros sabem e mentem.",
+    draw: (K, t) => {
+      sky(K, "#0b0f1a", "#0e1420");
+      for (let y = 44; y < 72; y++) K(0, y, 128, 1, "#171a15");
+      for (let i = 0; i < 6; i++) { const x = 8 + i * 20, c = ["#4f5a3a", "#5a4a3a", "#3a4a5a"][i % 3]; for (let k = 0; k < 10; k++) K(x + k, 50 - Math.min(k, 9 - k), 1, Math.min(k, 9 - k) + 6, c); }
+      const fl = Math.sin(t * 14) > 0;
+      for (let y = 40; y < 72; y++) { const r = (y - 40) * .9; K(Math.round(64 - r), y, Math.round(r * 2), 1, "rgba(232,140,60,.05)"); }
+      K(60, 58, 8, 8, "#3a3530"); K(61, 52, 6, 6, fl ? "#e8762a" : "#f0a030"); K(62, 49, 4, 3, fl ? "#f0a030" : "#e8762a");
+      [[44, 66], [52, 64], [76, 64], [84, 66]].forEach(([x, b], i) => { K(x, b - 9, 4, 9, ["#5b7a4f", "#7a4f4f", "#4f6d7a", "#8a7a4a"][i]); K(x, b - 13, 4, 4, ["#c68a5e", "#7d4a2a", "#e0ac83", "#a8693f"][i]); });
+    } },
+  { txt: "Você é o novo fiscal do Portão Leste. O anterior deixou passar um homem com febre. Ninguém viu esse homem de novo.",
+    draw: (K, t) => gateScene(K, t, null, 1) },
+];
+function sfx(f, d, type, vol, o = {}) {
+  if (!S.som) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = actx.createOscillator(), g = actx.createGain(), n = actx.currentTime + (o.delay || 0);
+    osc.type = type; osc.frequency.setValueAtTime(f, n);
+    if (o.to) osc.frequency.linearRampToValueAtTime(o.to, n + d);
+    const atk = o.atk || .01;
+    g.gain.setValueAtTime(.0001, n); g.gain.linearRampToValueAtTime(vol, n + atk);
+    g.gain.setValueAtTime(vol, n + Math.max(atk, d - (o.rel || .2))); g.gain.linearRampToValueAtTime(.0001, n + d);
+    let node = osc;
+    if (o.cut) { const lp = actx.createBiquadFilter(); lp.frequency.value = o.cut; osc.connect(lp); node = lp; }
+    node.connect(g); g.connect(actx.destination); osc.start(n); osc.stop(n + d + .05);
+  } catch (e) {}
+}
+function swell(d, f, vol, delay = 0) {
+  if (!S.som) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const n = actx.currentTime + delay, len = Math.floor(actx.sampleRate * d), buf = actx.createBuffer(1, len, actx.sampleRate), ch = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * i / len);
+    const src = actx.createBufferSource(), lp = actx.createBiquadFilter(), g = actx.createGain();
+    src.buffer = buf; lp.frequency.value = f; g.gain.value = vol;
+    src.connect(lp); lp.connect(g); g.connect(actx.destination); src.start(n);
+  } catch (e) {}
+}
+// Som de abertura de cada cena
+const CINE_SFX = [
+  () => { sfx(73, 2.6, "sawtooth", .12, { atk: .4, rel: .8, cut: 380 }); sfx(110, 2.6, "sawtooth", .06, { atk: .4, rel: .8, cut: 380 }); swell(3, 600, .35); swell(3, 600, .3, 2.5); },
+  () => { noise(.5, 6000, .5, .25); [0, .35, .7].forEach(t => sfx(853, .25, "sine", .05, { delay: .6 + t })); [0, .35, .7].forEach(t => sfx(960, .25, "sine", .05, { delay: .6 + t })); },
+  () => { noise(1.4, 220, .8, .9); sfx(45, 1.2, "sine", .4, { to: 30, rel: 1 }); },
+  () => { [0, .5, 1.1].forEach((t, i) => { sfx(320 - i * 40, .18, "square", .05, { delay: t, cut: 1800 }); noise(.12, 4000, 3, .2); }); sfx(60, 3, "sawtooth", .03, { atk: .8, rel: 1, cut: 200 }); },
+  () => { swell(2.5, 900, .12); },
+  () => { sfx(90, 1.6, "sawtooth", .07, { to: 150, atk: .3, rel: .4, cut: 600 }); setTimeout(() => { noise(.6, 300, .8, .8); sfx(50, .5, "sine", .35, { to: 35 }); }, 1500); },
+];
+// Sons de ambiente que se repetem enquanto a cena está na tela
+function cineAmb(i, dt) {
+  const r = Math.random();
+  if (i === 0 && r < dt * .25) swell(2.4, 500, .25);
+  if (i === 2) {
+    if (r < dt * 3) noise(.05, 3000, 2, .12);
+    if (r < dt * .35) sfx(650, 2.2, "sine", .03, { to: 900, atk: .4, rel: .6 });
+    if (r < dt * .12) noise(1.2, 160, .7, .6);
+  }
+  if (i === 3 && r < dt * .2) { sfx(260, .15, "square", .03, { cut: 1500 }); noise(.1, 4000, 3, .12); }
+  if (i === 4 && r < dt * 4) noise(.04, 2500, 2, .08);
+  if (i === 1 && r < dt * 2) noise(.08, 7000, .5, .05);
+}
+let cineCb = null;
+function playCine(cb) {
+  cineCb = cb; S.cine = { i: -1, shown: 0 }; S.phase = "cine";
+  $("#ccTxt").innerHTML = `<div class="cine-title"><h1>Zona de Quarentena</h1><span>Use fone de ouvido.</span><b>Toque para começar</b></div>`;
+  $("#cine").hidden = false;
+  $("#ccDots").innerHTML = CINE.map(() => "<i></i>").join("");
+  cineDots();
+}
+function cineDots() {
+  [...$("#ccDots").children].forEach((d, i) => d.classList.toggle("on", i <= S.cine.i));
+}
+function cineTap() {
+  const c = S.cine; if (!c) return;
+  if (c.i < 0) { musInit(); c.i = 0; c.shown = 0; $("#ccTxt").textContent = ""; cineDots(); setTimeout(CINE_SFX[0], 60); return; }
+  const L = CINE[c.i].txt;
+  if (c.shown < L.length) { c.shown = L.length; return; }
+  if (c.i < CINE.length - 1) { c.i++; c.shown = 0; beep(200, .05, "triangle", .04); cineDots(); CINE_SFX[c.i](); }
+  else cineEnd();
+}
+function cineEnd() {
+  if (!S.cine) return;
+  $("#cine").hidden = true; S.cine = null; S.seenCine = true;
+  const cb = cineCb; cineCb = null; cb && cb();
+}
+$("#cine").onclick = e => { if (e.target.id !== "ccSkip") cineTap(); };
+$("#ccSkip").onclick = cineEnd;
+
+// ---------- Som ----------
+let actx = null;
+function beep(f, d = .08, type = "square", vol = .05, slide = 0) {
+  if (!S.som) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain(), n = actx.currentTime;
+    o.type = type; o.frequency.setValueAtTime(f, n);
+    if (slide) o.frequency.linearRampToValueAtTime(f + slide, n + d);
+    g.gain.setValueAtTime(vol, n); g.gain.exponentialRampToValueAtTime(.0001, n + d);
+    o.connect(g); g.connect(actx.destination); o.start(n); o.stop(n + d + .02);
+  } catch (e) {}
+}
+
+function noise(d, f, q, vol) {
+  if (!S.som) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const n = actx.currentTime, len = Math.floor(actx.sampleRate * d), buf = actx.createBuffer(1, len, actx.sampleRate), ch = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    const src = actx.createBufferSource(), bp = actx.createBiquadFilter(), g = actx.createGain();
+    src.buffer = buf; bp.type = "lowpass"; bp.frequency.value = f; bp.Q.value = q;
+    g.gain.setValueAtTime(vol, n); src.connect(bp); bp.connect(g); g.connect(actx.destination); src.start(n);
+  } catch (e) {}
+}
+// ---------- Trilha sonora (gerada em tempo real) ----------
+const MUS = { on: true, started: false, step: 0, next: 0, out: null, rain: null, delay: null, vol: .5 };
+const BPM = 72, SIX = 60 / BPM / 4;
+const ACORDES = [[45, 48, 52], [41, 45, 48], [48, 52, 55], [40, 44, 47]]; // Lá m, Fá, Dó, Mi
+const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+function musInit() {
+  if (MUS.started || !MUS.on) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+    const n = actx.currentTime;
+    MUS.out = actx.createGain(); MUS.out.gain.setValueAtTime(0, n); MUS.out.gain.linearRampToValueAtTime(MUS.vol, n + 3);
+    MUS.out.connect(actx.destination);
+    const d = actx.createDelay(); d.delayTime.value = SIX * 3;
+    const fb = actx.createGain(); fb.gain.value = .38;
+    const lp = actx.createBiquadFilter(); lp.frequency.value = 1600;
+    d.connect(lp); lp.connect(fb); fb.connect(d); lp.connect(MUS.out); MUS.delay = d;
+    const len = actx.sampleRate * 2, buf = actx.createBuffer(1, len, actx.sampleRate), ch = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) ch[i] = Math.random() * 2 - 1;
+    const src = actx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const f = actx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 2400; f.Q.value = .5;
+    MUS.rain = actx.createGain(); MUS.rain.gain.value = 0;
+    src.connect(f); f.connect(MUS.rain); MUS.rain.connect(MUS.out); src.start();
+    MUS.next = actx.currentTime + .1; MUS.started = true;
+    setInterval(musTick, 50);
+  } catch (e) {}
+}
+function musMode() {
+  const ph = S.phase;
+  return ph === "cine" ? "cine" : ph === "gate" ? "gate" : ph === "play" || ph === "scan" || ph === "anim" ? "exam"
+    : ph === "lunge" ? "lunge" : "calma";
+}
+function tone(f, t, dur, type, vol, opts = {}) {
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (opts.detune) o.detune.value = opts.detune;
+  if (opts.drop) o.frequency.exponentialRampToValueAtTime(f * opts.drop, t + dur);
+  const atk = opts.atk || .005;
+  g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(vol, t + atk);
+  g.gain.setTargetAtTime(.0001, t + Math.max(atk, dur * (opts.hold || .3)), dur * .35);
+  let node = o;
+  if (opts.cut) { const lp = actx.createBiquadFilter(); lp.frequency.value = opts.cut; o.connect(lp); node = lp; }
+  node.connect(g); g.connect(MUS.out);
+  if (opts.send) g.connect(MUS.delay);
+  o.start(t); o.stop(t + dur * 2.5 + .1);
+}
+function tick(t, vol) {
+  const len = Math.floor(actx.sampleRate * .03), buf = actx.createBuffer(1, len, actx.sampleRate), ch = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = actx.createBufferSource(), hp = actx.createBiquadFilter(), g = actx.createGain();
+  src.buffer = buf; hp.type = "highpass"; hp.frequency.value = 6500; g.gain.value = vol;
+  src.connect(hp); hp.connect(g); g.connect(MUS.out); src.start(t);
+}
+function musTick() {
+  if (!MUS.on || !actx) return;
+  const mode = musMode(), now = actx.currentTime;
+  MUS.rain.gain.setTargetAtTime(mode === "gate" ? .05 : mode === "cine" ? .035 : .01, now, .8);
+  while (MUS.next < now + .25) { musStep(MUS.step, MUS.next, mode); MUS.next += SIX; MUS.step++; }
+}
+function musStep(step, t, mode) {
+  if (mode === "lunge") return;
+  const bar = Math.floor(step / 16) % 4, s16 = step % 16, ac = ACORDES[bar], BAR = SIX * 16;
+  const tenso = mode === "exam", agit = S.agit || 0;
+  if (s16 === 0) ac.forEach(m => {
+    const cut = tenso ? 700 + agit * 900 : 520;
+    tone(hz(m), t, BAR, "sawtooth", .022, { detune: -7, atk: 1.2, hold: .8, cut });
+    tone(hz(m), t, BAR, "sawtooth", .022, { detune: 7, atk: 1.2, hold: .8, cut });
+  });
+  if (tenso) {
+    if (s16 % 2 === 0) tone(hz(ac[0] - 12), t, SIX * 1.6, "triangle", .11, { cut: 500 });
+    if (s16 % 4 === 2) tick(t, .025 + agit * .03);
+    if (agit > .4 && (s16 === 0 || s16 === 2 || (agit > .7 && (s16 === 8 || s16 === 10))))
+      tone(s16 % 8 ? 50 : 62, t, .22, "sine", .32, { drop: .5 });
+    if (agit > .6 && s16 % 2 === 1 && Math.random() < agit - .4) tone(hz(ac[2] + 24), t, .15, "square", .015, { cut: 2500 });
+  } else {
+    if (s16 === 0 || (mode === "gate" && s16 === 8)) tone(hz(ac[0] - 12), t, BAR * .5, "sine", .14, { atk: .05, hold: .6 });
+    const PENTA = [69, 72, 74, 76, 79, 81];
+    if ([0, 6, 10, 14].includes(s16) && Math.random() < (mode === "cine" ? .5 : .32)) {
+      const m = Math.random() < .6 ? ac[Math.floor(Math.random() * 3)] + 24 : PENTA[Math.floor(Math.random() * PENTA.length)];
+      tone(hz(m), t, 1.4, "triangle", .07, { send: true, hold: .05 });
+      tone(hz(m) * 2, t, .6, "sine", .02, { send: true, hold: .05 });
+    }
+  }
+}
+function musDuck(sec) {
+  if (!MUS.out || !MUS.on) return;
+  const n = actx.currentTime; MUS.out.gain.cancelScheduledValues(n);
+  MUS.out.gain.setValueAtTime(.06, n); MUS.out.gain.linearRampToValueAtTime(MUS.vol, n + sec);
+}
+function audioUnlock() {
+  musInit();
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state !== "running") actx.resume();
+    if (!audioUnlock.done) { // buffer mudo: destrava o áudio no iOS
+      const b = actx.createBufferSource(); b.buffer = actx.createBuffer(1, 1, 22050); b.connect(actx.destination); b.start(0);
+      audioUnlock.done = true;
+    }
+  } catch (e) {}
+}
+["pointerdown", "touchend", "click", "keydown"].forEach(ev => document.addEventListener(ev, audioUnlock, { passive: true }));
+document.addEventListener("visibilitychange", () => { if (!document.hidden && actx && actx.state !== "running") actx.resume().catch(() => {}); });
+
+function gunshot() {
+  musDuck(2);
+  noise(.5, 3200, .7, .9); noise(.9, 400, .5, .6);
+  beep(110, .25, "sine", .5, -70); beep(60, .4, "triangle", .35, -30);
+  setTimeout(() => noise(.25, 1800, 1, .12), 140);
+}
+function scream() { musDuck(2.5); beep(520, .5, "sawtooth", .07, 380); noise(.6, 2400, 2, .25); }
+function splatter(heavy) {
+  const c = $("#splat"), k = c.getContext("2d");
+  c.height = Math.round(120 * innerHeight / Math.max(1, innerWidth));
+  const W = c.width, H = c.height, K = painter(k);
+  k.clearRect(0, 0, W, H);
+  const blobs = [], n = heavy ? 7 : 4;
+  for (let i = 0; i < n; i++) {
+    const x = R(10, W - 10), y = R(8, H * .65), r = R(6, heavy ? 17 : 12);
+    blobs.push([x, y, r]);
+    for (let j = 0; j < 7; j++) disc(K, x + R(-r, r) * .55, y + R(-r, r) * .55, r * R(.35, .7), "#6e0808");
+    for (let j = 0; j < 5; j++) disc(K, x + R(-r, r) * .4, y + R(-r, r) * .4, r * R(.25, .5), "#8e0f12");
+    for (let j = 0; j < 4; j++) { const a = R(0, 6.28); for (let d = r * .5; d < r * R(1.4, 2.2); d += .8) disc(K, x + Math.cos(a) * d, y + Math.sin(a) * d, Math.max(.6, r * .22 * (1 - d / (r * 2.2))), "#7a0b0d"); }
+    for (let j = 0; j < 14; j++) { const a = R(0, 6.28), d = R(r, r * 2.6); disc(K, x + Math.cos(a) * d, y + Math.sin(a) * d, R(.6, 2.2), "#8e0f12"); }
+  }
+  const drips = blobs.flatMap(([x, y, r]) => Array.from({ length: 3 }, () => [Math.round(x + R(-r * .7, r * .7)), Math.round(y + r * .6), R(10, 60), R(1, 2) | 0]));
+  c.classList.add("on");
+  let t0 = performance.now();
+  (function drip(now) {
+    const k2 = Math.min(1, (now - t0) / 1300);
+    for (const [x, y, len, w] of drips) K(x, y, w + 1, Math.round(len * k2), "#7a0b0d");
+    if (k2 < 1) requestAnimationFrame(drip);
+    else setTimeout(() => c.classList.remove("on"), 250);
+  })(t0);
+}
+function flashShake() {
+  const f = $("#flash"); f.classList.remove("on"); void f.offsetWidth; f.classList.add("on");
+  const a = $("#app"); a.classList.remove("shake"); void a.offsetWidth; a.classList.add("shake");
+}
+function flinch(text) {
+  if (text) $("#pFala").textContent = `“${text}”`;
+  const w = $(".portrait-wrap"); w.classList.remove("flinch"); void w.offsetWidth; w.classList.add("flinch");
+}
+const REACAO = {
+  temp: [["Tá gelado isso.", "Pode medir, eu não tenho febre.", "Rápido, por favor."], ["Tá... tá quente aqui, né?", "Tira isso de mim.", "Eu tô bem. Juro."]],
+  olhos: [["Ai! Essa luz!", "Tá me cegando!", "Pode olhar, é só cansaço."], ["APAGA ISSO!", "Para com essa luz...", "(desvia o rosto e rosna baixo)"]],
+  bracos: [["Pode ver, não tem nada.", "Cuidado, tá doendo.", "Viu? Tudo limpo."], ["Não puxa minha manga!", "É só um arranhão, juro!", "Não precisa olhar aí."]],
+  pulso: [["Meu coração tá disparado, desculpa.", "Tô nervoso, só isso.", "Mede logo."], ["(a mão dele está fria como gelo)", "Me solta.", "Tá tudo normal, né?"]],
+  pescoco: [["Isso é um colar da minha mãe.", "Pode olhar.", "Tá com medo de mim?"], ["Não encosta no meu pescoço.", "(puxa a gola pra cima)", "Por que tá olhando tanto?"]],
+};
+const PRESSA = [["Vai demorar muito?", "Por favor, eu tô com medo.", "Moço, eu tô bem, eu juro!"], ["Tá... tá tudo bem...", "(respiração pesada)", "(os dedos começam a tremer)"]];
+
+// ---------- Estado ----------
+const S = { day: 1, score: 0, best: 0, strikes: 0, queue: [], idx: 0, cur: null, time: 0, phase: "intro",
+  checked: {}, view: null, viewAt: 0, scan: null, streak: 0, dia: null, som: true, last: "" };
+try { S.best = +localStorage.getItem("zq-best") || 0; } catch (e) {}
+
+function dayConfig(d) {
+  const n = Math.min(5 + d, 14);
+  return { n, time: Math.max(n * 8, n * 13 - (d - 1) * 6) };
+}
+
+function startGame() {
+  S.tutDone = S.tutDone || {}; tutEnd();
+  Object.assign(S, { day: 1, score: 0, strikes: 0, streak: 0, pop: 0, blackout: false,
+    base: { muro: 55, comida: 45, saude: 45, energia: 50 }, bat: 3, batCharge: 0, workers: { muro: 1, comida: 1, saude: 1, energia: 1 } });
+  renderBase();
+  if (S.seenCine) dayIntro();
+  else { S.queue = []; S.idx = 0; S.cur = null; renderHUD(); playCine(dayIntro); }
+}
+function dayIntro() {
+  const cfg = dayConfig(S.day);
+  S.queue = Array.from({ length: cfg.n }, () => makePerson(S.day));
+  if (S.day === 1 && !S.tutDone.dia1) {
+    const p = S.queue[0];
+    Object.assign(p, { infected: true, signs: ["temp"], temp: 39.1, olhos: "normal" });
+  }
+  S.idx = 0; S.cur = null; S.time = cfg.time; S.phase = "intro"; S.view = null;
+  S.dia = { salvos: 0, eliminados: 0, acertos: 0, erros: 0, mortos: 0 };
+  const novos = TOOLS.filter(t => t.dia === S.day);
+  let alerta = "";
+  if (S.day === 3) {
+    S.base.energia = Math.max(0, S.base.energia - 35);
+    S.blackout = S.base.energia <= 0; renderBase();
+    alerta += `<div class="evento">O gerador principal entrou em colapso: energia −35. A partir de hoje a energia se desgasta quase o dobro. Salve eletricistas e mecânicos.</div>`;
+  }
+  $("#app").classList.toggle("blackout", !!S.blackout);
+  if (S.blackout) alerta += `<div class="evento">Apagão: sem luz para examinar braços e pescoço hoje. A lanterna não recarrega.</div>`;
+  if (S.day >= 2 && !S.blackout) { S.bat = 3; S.batCharge = 0; }
+  const intro = S.day === 1
+    ? `<p>Cada sobrevivente vai tentar te convencer no portão. Ouça, pergunte o que quiser e leve para a triagem. Lá você examina e decide: <b>salvar</b> quem está saudável, <b>eliminar</b> quem tem sinal de Febre Âmbar.</p>
+       <p>A conversa pode dar pistas, mas só o exame confirma. Deixar um infectado entrar acaba com a zona: fim de jogo na hora. Eliminar um inocente conta como erro. Com 3 erros, você é afastado.</p>
+       <p>Não demore. Na fila, todo mundo fica agitado: o infectado ataca, e o saudável entra em pânico, grita e atrai zumbis.</p>`
+    : novos.length ? `<p>Chegou equipamento novo: <b>${novos.map(t => t.nome).join(", ")}</b>. A fila também está maior.</p>`
+    : `<p>A infecção está mais difícil de ver. Mais gente na fila e menos tempo de turno.</p>`;
+  openOv(`<span class="eyebrow">Dia ${S.day} · ${cfg.n} na fila · turno de ${fmtTime(cfg.time)}</span>
+    <h2>${S.day === 1 ? "Primeiro turno" : "Dia " + S.day}</h2>${intro}${alerta}
+    ${S.day === 1 ? `<p>A zona depende de quem você deixa entrar. Ferreiros mantêm o muro, agricultores a comida, médicos a saúde, eletricistas a energia. Se o <b>muro</b> chegar a zero, a horda entra.</p>` : ""}
+    ${rulesHTML()}
+    <button class="btn main" id="go" type="button">Abrir o portão</button>`);
+  $("#go").onclick = () => { closeOv(); S.phase = "play"; beep(440, .1); beep(660, .12); nextPerson(); };
+  renderTools(); renderFicha(); renderHUD();
+}
+function rulesHTML() {
+  return `<ul class="rules">${TOOLS.filter(t => t.dia <= S.day).map(t =>
+    `<li class="${t.dia === S.day && S.day > 1 ? "novo" : ""}"><b>${t.nome}</b>${t.regra}</li>`).join("")}</ul>`;
+}
+function nextPerson() {
+  $("#stamp").hidden = true; cv.classList.remove("gone");
+  if (S.idx >= S.queue.length) return endDay(false);
+  const p = S.cur = S.queue[S.idx];
+  S.checked = {}; S.view = null; S.scan = null;
+  if (S.day >= 2 && S.bat <= 0) {
+    if (S.batCharge > 0) S.batCharge--;
+    else if (!S.blackout) { S.bat = 3; toast("Lanterna carregada: 3 usos.", "ok"); }
+  }
+  $("#pNome").textContent = p.nome;
+  $("#pInfo").textContent = `${p.idade} anos · ${p.oficio} · veio de ${p.origem}`;
+  $("#pRole").hidden = false;
+  $("#pRole").className = "chip" + (p.role ? " on" : "");
+  $("#pRole").textContent = p.role ? `${BASE[p.role].nome}: ${BASE[p.role].func.toLowerCase()}` : "Sem função na base";
+  $("#pFala").textContent = `“${p.fala}”`;
+  renderTools(); renderFicha(); renderHUD();
+  gateStart(p);
+  if (S.day === 1 && S.idx === 0 && !S.tutDone.dia1) { S.tutDone.dia1 = true; setTimeout(() => tutStart(TUT_DIA1.slice()), 400); }
+}
+function useTool(id) {
+  if (!S.cur || (S.phase !== "play")) return;
+  const t = TOOLS.find(t => t.id === id);
+  if (!t || t.dia > S.day) return;
+  if (S.checked[id]) { S.view = id; S.viewAt = performance.now() / 1000 - 5; renderTools(); return; }
+  if (S.blackout && (id === "bracos" || id === "pescoco")) return toast("Sem energia: está escuro demais para esse exame.", "bad");
+  if (id === "olhos" && S.day >= 2) {
+    if (S.bat <= 0) return toast(S.blackout && !S.batCharge ? "Lanterna sem bateria e sem energia para recarregar." : `Lanterna carregando. Volta em ${S.batCharge + 1} ${S.batCharge ? "pessoas" : "pessoa"}.`, "bad");
+    S.bat--;
+    if (S.bat === 0) { S.batCharge = 2; toast("A bateria da lanterna acabou. Vai carregar pelas próximas 2 pessoas.", "bad"); }
+  }
+  S.scan = { id, t: 0 }; S.phase = "scan"; S.view = null;
+  beep(880, .05); renderTools();
+}
+function finishScan() {
+  const id = S.scan.id; S.scan = null; S.phase = "play";
+  S.checked[id] = true; S.view = id; S.viewAt = performance.now() / 1000;
+  S.agit = Math.min(.99, S.agit + .07);
+  flinch(pick(REACAO[id][S.cur.infected && chance(.6) ? 1 : 0]));
+  beep(1320, .06, "sine", .06);
+  renderTools(); renderFicha();
+  tutEvent("tool:" + id);
+}
+function decide(save) {
+  if (!S.cur) return;
+  if (S.tut && TUT.steps[TUT.i] && TUT.steps[TUT.i].wait !== "decide" && S.phase !== "lunge") return toast("Siga o tutorial ou toque em Pular tutorial.", "");
+  if (TUT.steps.length) { tutEnd(); }
+  const lunge = S.phase === "lunge";
+  if (S.phase !== "play" && !(lunge && !save)) return;
+  if (!save) return shoot(lunge);
+  const p = S.cur;
+  stamp(true);
+  S.phase = "anim";
+  if (p.infected) {
+    beep(120, .5, "sawtooth", .06, 60);
+    setTimeout(() => { scream(); splatter(true); flashShake(); }, 600);
+    return setTimeout(() => gameOver("infectado", p), 2600);
+  }
+  beep(120, .45, "sawtooth", .05, 60);
+  verdict(true, p, false);
+}
+function stamp(ok) {
+  const st = $("#stamp");
+  st.hidden = false; st.className = "stamp " + (ok ? "ok" : "bad"); st.textContent = ok ? "LIBERADO" : "ELIMINADO";
+}
+function shoot(reflex) {
+  const p = S.cur;
+  S.phase = "anim";
+  $(".portrait-wrap").classList.remove("lunge"); $("#bElim").classList.remove("fire"); $("#bElim").textContent = "Eliminar";
+  const m = document.createElement("div"); m.className = "mira"; $(".portrait-wrap").append(m);
+  setTimeout(() => {
+    m.remove(); gunshot(); flashShake(); splatter(true);
+    p.shot = true; p.fall = 0; cv.classList.add("gone");
+    const t0 = performance.now();
+    (function fall(now) { p.fall = Math.min(16, (now - t0) / 40); if (p.fall < 16 && p.shot) requestAnimationFrame(fall); })(t0);
+  }, reflex ? 60 : 260);
+  setTimeout(() => { stamp(false); verdict(false, p, reflex); }, reflex ? 500 : 750);
+}
+function verdict(save, p, reflex) {
+  if (!save && !p.infected) {
+    S.strikes++; S.streak = 0; S.score = Math.max(0, S.score - 150); S.dia.erros++; S.dia.eliminados++;
+    beep(220, .3, "sawtooth", .06, -60);
+    toast(`${p.nome} estava saudável. ${distractorTxt(p)}` + (p.role ? ` A base perdeu ${artigo(p)} ${p.oficio}.` : ""), "bad");
+    if (p.role) hurtBase(p.role);
+    renderHUD();
+    if (S.strikes >= 3) return setTimeout(() => gameOver("inocentes", p), 1300);
+    return setTimeout(() => { S.idx++; nextPerson(); }, 1300);
+  }
+  {
+    const bonus = Math.min(S.streak * 20, 200);
+    S.score += 100 + bonus; S.streak++; S.dia.acertos++;
+    save ? S.dia.salvos++ : S.dia.eliminados++;
+    if (save) admit(p);
+    if (save) { beep(660, .09); beep(990, .12, "square", .04); }
+    if (reflex) S.score += 50;
+    toast(save ? (p.role ? `${p.nome} vai reforçar ${BASE[p.role].nome.toLowerCase()}. +${100 + bonus}` : `Liberado. +${100 + bonus}`) : reflex ? `Reflexo! Era infectado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${150 + bonus}` : `Infectado confirmado: ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. +${100 + bonus}`, "ok");
+  }
+  renderHUD();
+  setTimeout(() => { S.idx++; nextPerson(); }, save ? 1000 : 1400);
+}
+function artigo(p) { return p.fem ? "uma" : "um"; }
+function admit(p) {
+  S.pop++;
+  if (p.role) { S.workers[p.role]++; renderBase(); flashBase(p.role, "pulse"); }
+}
+function hurtBase(role) { flashBase(role, "hurt"); }
+function flashBase(role, cls) {
+  const el = document.querySelector(`.base-item[data-r="${role}"]`); if (!el) return;
+  el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+}
+function renderBase() {
+  const box = $("#base"); if (!S.base) return;
+  box.innerHTML = Object.keys(BASE).map(k => {
+    const v = Math.max(0, Math.round(S.base[k]));
+    return `<div class="base-item" data-r="${k}" title="${BASE[k].func}"><div class="base-top">${BASE[k].nome}<b>${v}</b></div>
+      <div class="meter"><i class="${v < 25 ? "low" : v < 50 ? "mid" : ""}" style="width:${v}%"></i></div>
+      <div class="base-sub">${S.workers[k]} ${S.workers[k] === 1 ? "pessoa" : "pessoas"}</div></div>`;
+  }).join("");
+}
+// Fecha o dia: produção dos trabalhadores menos o desgaste. Recursos zerados têm consequência.
+function runBase() {
+  const rows = [], eventos = [];
+  for (const k in BASE) {
+    const antes = S.base[k], q = BASE[k].queda(S.day), p = S.workers[k] * BASE[k].prod;
+    S.base[k] = Math.max(0, Math.min(100, antes + p - q));
+    rows.push({ k, antes, depois: S.base[k], q, p });
+  }
+  const perde = (n, motivo) => {
+    for (let i = 0; i < n; i++) {
+      const vivos = Object.keys(S.workers).filter(k => S.workers[k] > 0);
+      if (!vivos.length) break;
+      const k = pick(vivos); S.workers[k]--;
+      eventos.push(`${motivo}: a base perdeu um trabalhador de ${BASE[k].nome.toLowerCase()}.`);
+    }
+  };
+  if (S.base.comida <= 0) { perde(2, "Fome"); S.pop = Math.max(0, S.pop - 3); S.base.saude = Math.max(0, S.base.saude - 15); eventos.push("Sem comida, três moradores foram embora e a saúde da zona piorou."); }
+  if (S.base.saude <= 0) perde(1, "Uma doença se espalhou");
+  S.blackout = S.base.energia <= 0;
+  if (S.blackout) eventos.push("Sem energia: os refletores apagaram. Amanhã não dá para examinar braços nem pescoço, e a lanterna não recarrega.");
+  for (const r of rows) if (r.depois > 0 && r.depois < 25) eventos.push(`${BASE[r.k].nome} está em ${Math.round(r.depois)}. Precisa de ${({ muro: "ferreiro ou soldador", comida: "agricultor ou cozinheiro", saude: "médico ou enfermeiro", energia: "eletricista ou mecânico" })[r.k]}.`);
+  renderBase();
+  const html = `<div class="report">${rows.map(r => {
+    const d = Math.round(r.depois - r.antes);
+    return `<div class="r"><span>${BASE[r.k].nome}<small>${S.workers[r.k]} trab. produzem +${r.p} · desgaste −${r.q}</small></span>
+      <span class="d ${d < 0 ? "neg" : d > 0 ? "pos" : ""}">${d > 0 ? "+" : ""}${d}</span><b>${Math.round(r.depois)}</b></div>`;
+  }).join("")}</div>${eventos.map(e => `<div class="evento">${e}</div>`).join("")}`;
+  return { html, muroCaiu: S.base.muro <= 0 };
+}
+function zombieGroan() {
+  [0, .35, .8].forEach((d, i) => sfx(78 - i * 9, 1.3, "sawtooth", .13, { delay: d, to: 52 - i * 6, atk: .15, rel: .6, cut: 420 }));
+  noise(1.6, 350, .7, .5);
+}
+function zombie(K0, x0, b0, t, dir, lean, sc = 2) {
+  const K = (X, Y, w, h, c) => K0(x0 + X * sc, b0 + Y * sc, w * sc, h * sc, c);
+  const sk = "#7d9470", skD = "#5c704f", roupa = "#3d3a33", calca = "#26262c", step = Math.floor(t * 5) % 2;
+  K(-3, -12, 2, 12 - step, calca); K(1, -12, 2, 11 + step, calca);
+  K(-4, -24, 8, 12, roupa); K(-4, -24, 8, 1, "#4d493f");
+  K(-2, -19, 2, 2, "#5a1a1a"); K(1, -16, 2, 3, skD); K(-3, -14, 1, 2, "#5a1a1a");
+  if (dir > 0) { K(4, -22, 10, 2, roupa); K(14, -22, 2, 2, sk); K(4, -19, 8, 2, roupa); K(12, -19, 2, 2, sk); }
+  else { K(-14, -22, 10, 2, roupa); K(-16, -22, 2, 2, sk); K(-12, -19, 8, 2, roupa); K(-14, -19, 2, 2, sk); }
+  const hx = -3 + lean * dir;
+  K(-1, -26, 2, 2, skD);
+  K(hx, -34, 6, 8, sk); K(dir > 0 ? hx : hx + 4, -33, 2, 6, skD);
+  K(hx + 1, -35, 2, 1, "#2a2a22"); K(hx + 4, -35, 1, 1, "#2a2a22");
+  const ex = dir > 0 ? hx + 2 : hx + 1;
+  K(ex, -31, 1, 1, "#e8d040"); K(ex + 2, -31, 1, 1, "#e8d040");
+  K(ex, -28, 3, 2, "#2a0505"); K(ex + 1, -26, 1, 2, "#8e1010");
+}
+const akx = $("#ak").getContext("2d"), AK = painter(akx);
+function drawAttack(T, now) {
+  const p = S.atk.p, r = rng(p.seed + 7);
+  const grab = T > 1.25, drag = Math.max(0, T - 2.1);
+  const shake = T < 2.1 && T > .1 ? (Math.sin(now * 55) > 0 ? 1 : -1) : 0;
+  const db = Math.round(drag * 34);
+  gateScene(AK, now, p, 1, { dx: shake, db, noHands: T > 1.1, mid: K => {
+    if (T < 2.1) K(62 + shake, 89 + db - 58, 4, 4, "#2a0505");
+    const zl = Math.min(42, -24 + T * 56), zr = Math.max(86, 152 - T * 56);
+    const zb = 91 + (grab ? db : 0);
+    zombie(K, Math.round(zl), zb, now, 1, grab ? 3 : 0);
+    zombie(K, Math.round(zr), zb - 1, now + .4, -1, grab ? 2 : 0);
+    if (grab) {
+      const dt = T - 1.3;
+      for (let i = 0; i < 30; i++) {
+        const vx = (r() - .5) * 70, vy = -20 - r() * 45, d = Math.max(0, dt - r() * .4);
+        if (d <= 0 || d > 1.3) continue;
+        K(Math.round(62 + vx * d), Math.round(36 + db + vy * d + 70 * d * d), 2, 2, r() < .5 ? "#8e0f12" : "#b3222a");
+      }
+      K(56 + shake, 36 + db, 10, 6, "#7e0d0d");
+    }
+    if (drag > 0) { const w = Math.round(Math.min(1, drag * 1.4) * 56); K(64 - w / 2, 62, w, 4, "#5e0707"); K(64 - w / 3, 61, w * 2 / 3, 1, "#7e0d0d"); }
+  } });
+  if (T > 2.7) { akx.globalAlpha = Math.min(1, (T - 2.7) / .5); AK(0, 0, 128, 72, "#040504"); akx.globalAlpha = 1; }
+}
+// Saudável no limite: entra em pânico, grita e atrai zumbis para o portão.
+function panic() {
+  const p = S.cur;
+  S.phase = "anim";
+  $("#pFala").textContent = "“SOCORRO! ME TIRA DAQUI!”";
+  $(".portrait-wrap").classList.add("lunge");
+  sfx(620, .9, "sawtooth", .08, { to: 900, atk: .05, rel: .4, cut: 2600 }); noise(.8, 2200, 2, .25);
+  musDuck(4);
+  setTimeout(() => {
+    $(".portrait-wrap").classList.remove("lunge");
+    S.atk = { p, t0: performance.now() / 1000 };
+    $("#atk").hidden = false; $("#atk").classList.add("shake");
+    sfx(700, 1.1, "sawtooth", .07, { to: 1000, atk: .05, rel: .5, cut: 2800 });
+  }, 500);
+  setTimeout(() => zombieGroan(), 900);
+  setTimeout(() => { noise(.4, 900, 1.2, .9); sfx(90, .3, "sine", .3, { to: 50 }); splatter(true); flashShake(); sfx(900, .6, "sawtooth", .06, { to: 400, rel: .3, cut: 2400 }); }, 500 + 1300);
+  setTimeout(() => { $("#atk").classList.remove("shake"); zombieGroan(); }, 500 + 2100);
+  setTimeout(() => {
+    $("#atk").hidden = true; S.atk = null;
+    p.shot = true; p.fall = 0; cv.classList.add("gone");
+    const t0 = performance.now();
+    (function fall(now) { p.fall = Math.min(16, (now - t0) / 40); if (p.fall < 16) requestAnimationFrame(fall); })(t0);
+    const st = $("#stamp"); st.hidden = false; st.className = "stamp bad"; st.textContent = "MORTO";
+    S.base.muro = Math.max(0, S.base.muro - 8); renderBase(); flashBase("muro", "hurt");
+    S.score = Math.max(0, S.score - 100); S.streak = 0; S.dia.mortos++;
+    toast(`${p.nome} entrou em pânico, gritou e atraiu os zumbis. Muro −8.` + (p.role ? ` A base perdeu ${artigo(p)} ${p.oficio}.` : ""), "bad");
+    renderHUD();
+  }, 500 + 3300);
+  setTimeout(() => {
+    if (S.base.muro <= 0) return gameOver("muro");
+    S.idx++; nextPerson();
+  }, 500 + 3300 + 1800);
+}
+function startLunge() {
+  S.phase = "lunge"; S.lungeT = Math.max(1.1, 1.7 - S.day * .1);
+  scream(); flashShake();
+  $(".portrait-wrap").classList.add("lunge");
+  $("#pFala").textContent = "“RRAAAHH!”";
+  $("#bElim").textContent = "Atirar!"; $("#bElim").classList.add("fire");
+  renderHUD();
+}
+function distractorTxt(p) {
+  const d = [];
+  if (p.temp >= 37.6) d.push(`${fmtT(p.temp)} ainda não é febre`);
+  if (p.olhos === "vermelho") d.push("olho vermelho era só cansaço");
+  if (p.bracos === "cicatriz") d.push("a marca no braço era cicatriz antiga");
+  if (p.bracos === "tatuagem") d.push("o desenho no braço era tatuagem");
+  if (p.pulso > 108 && S.day >= 3) d.push("pulso acelerado é nervosismo");
+  if (p.pescoco !== "limpo" && p.pescoco !== "veias" && S.day >= 4) d.push(`no pescoço era ${p.pescoco === "colar" ? "um colar" : "tatuagem"}`);
+  const f = d.filter((_, i) => i < 2).join("; ");
+  return f ? f.charAt(0).toUpperCase() + f.slice(1) + "." : "Nenhum exame mostrava sinal.";
+}
+function endDay(timeout) {
+  S.phase = "over-day"; S.scan = null;
+  const left = S.queue.length - S.idx;
+  const bonus = timeout ? 0 : Math.floor(S.time) * 2;
+  S.score += bonus; saveBest(); renderHUD();
+  beep(523, .1); beep(784, .15);
+  const rep = runBase();
+  openOv(`<span class="eyebrow">Fim do turno</span>
+    <h2>Dia ${S.day} concluído</h2>
+    ${timeout ? `<p>O turno acabou com ${left} ${left === 1 ? "pessoa" : "pessoas"} ainda na fila. Elas voltaram para a estrada.</p>` : `<p>Fila zerada antes do fim do turno. Bônus de tempo: +${bonus}.</p>`}
+    <div class="stats">
+      <div><b>${S.dia.salvos}</b><span>Salvos</span></div>
+      <div><b>${S.dia.eliminados}</b><span>Eliminados</span></div>
+      <div><b>${S.dia.acertos}</b><span>Acertos</span></div>
+      <div><b>${S.strikes}/3</b><span>Erros no total</span></div>
+    </div>
+    ${S.dia.mortos ? `<div class="evento">${S.dia.mortos} ${S.dia.mortos === 1 ? "pessoa morreu" : "pessoas morreram"} no portão depois de entrar em pânico.</div>` : ""}
+    <span class="eyebrow">Relatório da base · ${S.pop} acolhidos até agora</span>
+    ${rep.html}
+    <p>Pontuação: <b>${S.score}</b></p>
+    <button class="btn main" id="go" type="button">${rep.muroCaiu ? "Ver o que aconteceu" : "Começar dia " + (S.day + 1)}</button>`);
+  $("#go").onclick = rep.muroCaiu ? () => gameOver("muro") : () => { S.day++; dayIntro(); };
+}
+function gameOver(kind, p) {
+  S.phase = "over"; saveBest(); renderHUD();
+  const txt = kind === "muro"
+    ? `<h2 class="bad">O muro caiu</h2><p>Sem ninguém para soldar e reforçar, o portão cedeu durante a noite. A horda entrou na Zona 7. Salvar ferreiros e soldadores é o que mantém o muro de pé.</p>`
+    : kind === "mordido"
+    ? `<h2 class="bad">Você foi mordido</h2><p>${p.nome} avançou antes que você reagisse. Tinha ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. Quanto mais você demora com um infectado, mais agitado ele fica.</p>`
+    : kind === "infectado"
+    ? `<h2 class="bad">A zona foi contaminada</h2><p>Você liberou ${p.nome}, que tinha ${p.signs.map(s => SIGN_TXT[s](p)).join(" e ")}. A infecção se espalhou dentro dos muros.</p>`
+    : `<h2 class="bad">Você foi afastado do posto</h2><p>Três sobreviventes saudáveis foram eliminados no seu turno. O comando tirou você do portão.</p>`;
+  openOv(`<span class="eyebrow">Fim de jogo · Dia ${S.day}</span>${txt}
+    <div class="stats"><div><b>${S.score}</b><span>Pontos</span></div><div><b>${S.best}</b><span>Recorde</span></div><div><b>${S.day}</b><span>Dias</span></div><div><b>${S.pop}</b><span>Acolhidos</span></div></div>
+    <button class="btn main" id="go" type="button">Jogar de novo</button>
+    <button class="link" id="rever" type="button">Rever a abertura</button>`);
+  $("#go").onclick = startGame;
+  $("#rever").onclick = () => { closeOv(); S.seenCine = false; startGame(); };
+}
+function saveBest() {
+  if (S.score > S.best) { S.best = S.score; try { localStorage.setItem("zq-best", S.best); } catch (e) {} }
+}
+
+// ---------- Interface ----------
+function fmtTime(s) { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+function renderHUD() {
+  $("#hDia").textContent = S.day;
+  $("#hTempo").textContent = fmtTime(S.time);
+  $("#hTempo").classList.toggle("warn", S.time < 15 && S.phase !== "intro");
+  $("#hFila").textContent = Math.max(0, S.queue.length - S.idx);
+  $("#hPts").textContent = S.score;
+  $("#hErros").textContent = "■".repeat(S.strikes) + "□".repeat(Math.max(0, 3 - S.strikes));
+  const can = S.phase === "play" && !!S.cur;
+  $("#bSalv").disabled = !can;
+  $("#bElim").disabled = !(can || S.phase === "lunge");
+}
+function renderTools() {
+  const box = $("#tools");
+  if (!box.children.length) TOOLS.forEach((t, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "tool"; b.dataset.id = t.id; b.title = `${t.nome} (tecla ${i + 1})`;
+    b.append(toolIcon(t.id)); const s = document.createElement("span"); b.append(s);
+    b.onclick = () => useTool(t.id); box.append(b);
+  });
+  [...box.children].forEach(b => {
+    const t = TOOLS.find(t => t.id === b.dataset.id), locked = t.dia > S.day;
+    const escuro = S.blackout && (t.id === "bracos" || t.id === "pescoco");
+    const semBat = t.id === "olhos" && S.day >= 2 && S.bat <= 0 && !S.checked.olhos;
+    b.querySelector("span").textContent = locked ? `Dia ${t.dia}` : escuro ? "Sem luz" : semBat ? (S.blackout && !S.batCharge ? "Sem bateria" : `Carregando`)
+      : t.id === "olhos" && S.day >= 2 ? `Lanterna ${"▮".repeat(S.bat)}${"▯".repeat(3 - S.bat)}` : t.nome;
+    b.disabled = locked || !S.cur || escuro || semBat;
+    b.classList.toggle("done", !!S.checked[t.id]);
+    b.classList.toggle("on", S.view === t.id || (S.scan && S.scan.id === t.id));
+  });
+}
+function renderFicha() {
+  const f = $("#ficha"), p = S.cur;
+  const rows = TOOLS.filter(t => S.checked[t.id]).map(t => {
+    const v = t.id === "temp" ? fmtT(p.temp) : t.id === "pulso" ? `${p.pulso} bpm` : "ver";
+    return `<li class="row" data-id="${t.id}"><span>${t.nome}</span><b>${v}</b></li>`;
+  }).join("");
+  f.innerHTML = `<li class="tit">Ficha de triagem</li>${rows || `<li class="vazio">Nenhum exame feito. Use os botões abaixo.</li>`}`;
+  f.querySelectorAll(".row").forEach(li => li.onclick = () => useTool(li.dataset.id));
+}
+function openOv(html) { $("#ovCard").innerHTML = html; $("#ov").hidden = false; setTimeout(() => { const g = $("#go"); g && g.focus(); }, 30); }
+function closeOv() { $("#ov").hidden = true; }
+let toastT = 0;
+function toast(msg, kind) {
+  const t = $("#toast"); t.textContent = msg; t.className = "toast " + (kind || ""); t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600);
+}
+
+let paused = null;
+$("#bManual").onclick = () => {
+  if (!$("#ov").hidden || (S.phase !== "play" && S.phase !== "scan" && S.phase !== "gate")) return;
+  paused = S.phase; S.phase = "paused";
+  openOv(`<span class="eyebrow">Manual do fiscal · turno pausado</span><h2>Sinais de infecção</h2>${rulesHTML()}
+    <p>Cada profissão sustenta uma parte da base: muro (ferreiro, soldador), comida (agricultor, cozinheiro), saúde (médico, enfermeiro), energia (eletricista, mecânico). Todo dia o muro e os estoques se desgastam.</p>
+    <p>No portão, a conversa pode dar pistas, mas só o exame confirma. Salvar um infectado encerra o jogo. Eliminar um saudável custa 150 pontos e um erro.</p>
+    <p>Agitação no máximo: o infectado ataca (atire rápido) e o saudável grita, atrai zumbis e morre no portão, danificando o muro.</p>
+    <p class="info">Atalhos no teclado: 1 a 5 para os exames, E para eliminar, S para salvar.</p>
+    <button class="btn main" id="go" type="button">Voltar ao portão</button>`);
+  $("#go").onclick = () => { closeOv(); S.phase = paused; paused = null; };
+};
+$("#bSom").onclick = () => { S.som = !S.som; $("#bSom").textContent = "Efeitos: " + (S.som ? "ligados" : "desligados"); };
+$("#bMus").onclick = e => {
+  e.stopPropagation(); MUS.on = !MUS.on; $("#bMus").textContent = "Música: " + (MUS.on ? "ligada" : "desligada");
+  if (MUS.on) musInit();
+  if (MUS.out) MUS.out.gain.setTargetAtTime(MUS.on ? MUS.vol : 0, actx.currentTime, .3);
+};
+$("#bElim").onclick = () => decide(false);
+$("#bSalv").onclick = () => decide(true);
+document.addEventListener("keydown", e => {
+  if (!$("#ov").hidden) return;
+  const k = e.key.toLowerCase();
+  if (S.phase === "cine") { if (k === "enter" || k === " ") { e.preventDefault(); cineTap(); } else if (k === "escape") cineEnd(); return; }
+  if (S.phase === "gate") { if (k === "enter" || k === " ") { e.preventDefault(); gateTap(); } else if (k === "t") toExam(); return; }
+  if (k >= "1" && k <= "5") useTool(TOOLS[+k - 1].id);
+  else if (k === "e") decide(false);
+  else if (k === "s") decide(true);
+});
+
+// ---------- Tutorial ----------
+const TUT = { steps: [], i: 0 };
+const TUT_DIA1 = [
+  { el: "#dlg", txt: "Este é o <b>portão</b>. Cada sobrevivente vai tentar te convencer a deixar entrar. A conversa pode dar pistas, mas não prova nada." },
+  { el: "#choices", txt: "Você pode fazer perguntas. Quando quiser, toque em <b>Levar para a triagem</b>.", wait: "triagem" },
+  { el: "#base", txt: "Estes são os <b>recursos da base</b>. Todo dia eles se desgastam. Quem você salva repõe: ferreiro mantém o muro, agricultor a comida, médico a saúde, eletricista a energia. <b>Muro em zero, a horda entra.</b>" },
+  { el: "#pRole", txt: "Aqui aparece a <b>profissão</b> da pessoa e o que ela faria pela base. Matar quem tem profissão também custa caro." },
+  { el: ".agit", txt: "A <b>agitação</b> sobe enquanto você demora. No máximo, o infectado ataca e o saudável entra em pânico, grita e atrai zumbis. Hoje ela sobe devagar. Está pausada enquanto você lê." },
+  { el: '.tool[data-id="temp"]', txt: "Comece pelo <b>termômetro</b>. Toque nele.", wait: "tool:temp" },
+  { el: ".exam-view", txt: "<b>38,0 °C ou mais é febre</b>, sinal de infecção. Até 37,9 °C pode passar." },
+  { el: '.tool[data-id="olhos"]', txt: "Agora a <b>lanterna</b>. Toque nela.", wait: "tool:olhos" },
+  { el: ".exam-view", txt: "Olhe a parte branca do olho: <b>amarelada</b>, com pupila que não diminui na luz, é infecção. Olho vermelho de cansaço é normal." },
+  { el: ".decide", txt: "Decida. <b>Salvar</b> um infectado acaba com o jogo na hora. <b>Eliminar</b> um saudável conta como erro (3 erros e você é afastado).", wait: "decide" },
+];
+const TUT_NOVO = {
+  bracos: { el: '.tool[data-id="bracos"]', txt: "Novo exame: <b>braços</b>. Mordida (marca de dentes vermelha com roxo em volta) é infecção. Cicatriz clara e tatuagem são normais. Sem energia, está escuro demais para usar." },
+  olhos: { el: '.tool[data-id="olhos"]', txt: "A partir de hoje a <b>lanterna tem bateria</b>: 3 usos. Quando acaba, fica carregando por 2 pessoas. Sem energia, não recarrega." },
+  pulso: { el: '.tool[data-id="pulso"]', txt: "Novo exame: <b>pulso</b>. Abaixo de 50 bpm é infecção. Pulso acelerado é só nervosismo." },
+  energia: { el: '.base-item[data-r="energia"]', txt: "O <b>gerador</b> está em colapso. A energia agora cai rápido. Sem energia, você <b>não consegue examinar braços nem pescoço</b>." },
+  pescoco: { el: '.tool[data-id="pescoco"]', txt: "Novo exame: <b>pescoço</b>. Veias escuras e arroxeadas subindo pelo pescoço são infecção. Colar e tatuagem são normais. Sem energia, não dá para ver." },
+};
+function tutStart(steps) { if (!steps.length) return; TUT.steps = steps; TUT.i = 0; tutShow(); }
+function tutEnd() { TUT.steps = []; tutShow(); }
+function tutShow() {
+  document.querySelectorAll(".hl").forEach(e => e.classList.remove("hl"));
+  const st = TUT.steps[TUT.i], tip = $("#tip");
+  if (!st) { tip.hidden = true; S.tut = false; return; }
+  S.tut = true;
+  const el = document.querySelector(st.el);
+  if (!el || !el.offsetParent) { tip.hidden = true; return; }
+  el.classList.add("hl");
+  tip.innerHTML = `<div class="tip-top"><span>Tutorial · ${TUT.i + 1}/${TUT.steps.length}</span><button class="skip" type="button" id="tutSkip">Pular tutorial</button></div><div>${st.txt}</div>${st.wait ? "" : `<button type="button" id="tutOk">Entendi</button>`}`;
+  tip.hidden = false;
+  const r = el.getBoundingClientRect(), h = tip.offsetHeight;
+  const below = r.bottom + 12 + h < innerHeight - 8;
+  tip.style.top = (below ? r.bottom + 12 : Math.max(8, r.top - 12 - h)) + "px";
+  $("#tutSkip").onclick = tutEnd;
+  if (!st.wait) $("#tutOk").onclick = () => { TUT.i++; tutShow(); };
+}
+function tutEvent(name) {
+  // Se o jogador se adiantou, pula direto para depois do passo que esperava essa ação.
+  const j = TUT.steps.findIndex((st, k) => k >= TUT.i && st.wait === name);
+  if (j >= 0) { TUT.i = j + 1; setTimeout(tutShow, 30); }
+}
+function tutNovidades() {
+  // Primeira pessoa de cada dia em que algo muda: dica do que é novo.
+  const k = [];
+  if (S.day === 2) k.push("bracos", "olhos");
+  if (S.day === 3) k.push("pulso", "energia");
+  if (S.day === 4) k.push("pescoco");
+  const steps = k.filter(x => !S.tutDone[x]).map(x => { S.tutDone[x] = true; return TUT_NOVO[x]; });
+  tutStart(steps);
+}
+
+// ---------- Loop ----------
+let last = performance.now();
+function loop(nowMs) {
+  const now = nowMs / 1000, dt = Math.min(.1, (nowMs - last) / 1000); last = nowMs;
+  if ((S.phase === "play" || S.phase === "scan") && !S.tut) {
+    S.time -= dt;
+    if (S.time <= 0) { S.time = 0; endDay(true); }
+  }
+  if ((S.phase === "play" || S.phase === "scan") && S.cur) {
+    const p = S.cur, prev = S.agit;
+    // Saudáveis e infectados se agitam no mesmo ritmo (com variação por pessoa): esperar não revela nada, só aumenta o risco.
+    p.agitRate = p.agitRate || R(.8, 1.2) / (S.day === 1 ? 45 : Math.max(9, 17 - S.day));
+    if (!S.tut) S.agit = Math.min(1, S.agit + dt * p.agitRate);
+    if (prev < .5 && S.agit >= .5) flinch(pick(PRESSA[p.infected && chance(.5) ? 1 : 0]));
+    if (prev < .8 && S.agit >= .8) flinch(p.infected ? pick(PRESSA[1]) : pick(["Por favor! Eu tenho família!", "Eu não aguento mais esperar!", "(começa a hiperventilar)"]));
+    if (S.agit >= 1 && S.phase === "play") p.infected ? startLunge() : panic();
+  }
+  if (S.phase === "lunge") {
+    S.lungeT -= dt;
+    if (S.lungeT <= 0) { S.phase = "over"; $(".portrait-wrap").classList.remove("lunge"); $("#bElim").classList.remove("fire"); $("#bElim").textContent = "Eliminar"; scream(); splatter(true); flashShake(); setTimeout(() => gameOver("mordido", S.cur), 2200); }
+  }
+  $("#agit").style.width = Math.min(100, (S.agit || 0) * 100) + "%";
+  if (S.scan && S.phase === "scan") {
+    S.scan.t += dt;
+    const st = SCAN_T;
+    $("#scan").style.width = Math.min(100, S.scan.t / st * 100) + "%";
+    if (S.scan.t >= st) finishScan();
+  } else if (!S.scan) $("#scan").style.width = "0";
+  if (S.atk) drawAttack(now - S.atk.t0, now);
+  if (S.cine && S.cine.i < 0) gateScene(C, now, null, 1);
+  else if (S.cine) {
+    const c = S.cine, L = CINE[c.i].txt;
+    if (c.shown < L.length) {
+      const before = Math.floor(c.shown);
+      c.shown = Math.min(L.length, c.shown + dt * 42);
+      if (Math.floor(c.shown) !== before && before % 2 === 0 && L[before] !== " ") beep(1700 + Math.random() * 300, .012, "square", .012);
+    }
+    const txt = L.slice(0, Math.floor(c.shown));
+    if ($("#ccTxt").textContent !== txt) $("#ccTxt").textContent = txt;
+    CINE[c.i].draw(C, now);
+    cineAmb(c.i, dt);
+  }
+  if (S.phase === "gate" && S.g) {
+    const g = S.g, L = gateLine();
+    g.walk = Math.min(1, g.walk + dt / .9);
+    if (g.walk >= .4 && g.shown >= L.length && g.mode !== "menu") {
+      g.wait += dt;
+      if (g.wait > .4 + L.length / 40) gateTap();
+    }
+    if (g.walk >= .4 && g.shown < L.length) {
+      if (g.shown === 0) gateShake();
+      const before = Math.floor(g.shown); g.shown = Math.min(L.length, g.shown + dt * 55);
+      if (Math.floor(g.shown) !== before) { renderGate(); if (before % 3 === 0 && !g.me) beep(160 + (S.cur.seed % 5) * 30, .025, "square", .015); }
+    }
+    gateScene(G, now, S.cur, g.walk);
+  }
+  drawPortrait(S.cur, now);
+  const since = now - S.viewAt;
+  if (S.scan) {
+    drawExam(null, null);
+    for (let i = 0; i < 70; i++) E(Math.random() * 64 | 0, Math.random() * 40 | 0, 1, 1, "#2f5a37");
+  } else drawExam(S.cur, S.view, now, since);
+  const msg = S.scan ? "Examinando…" : !S.view ? (S.cur ? "Escolha um exame" : "") :
+    S.view === "temp" ? fmtT(S.cur.temp) : S.view === "pulso" ? `${S.cur.pulso} bpm` :
+    S.view === "olhos" ? "Olho sob a lanterna" : S.view === "bracos" ? "Antebraço" : "Pescoço";
+  if (msg !== S.last) { $("#exMsg").textContent = msg; S.last = msg; }
+  if (S.phase === "play" || S.phase === "scan") { $("#hTempo").textContent = fmtTime(S.time); $("#hTempo").classList.toggle("warn", S.time < 15); }
+  requestAnimationFrame(loop);
+}
+// Abertura do estúdio: logo da Valtore no fundo preto. Toque pula.
+(() => {
+  const V = ["XX.........XX", "XX.........XX", ".XX.......XX.", ".XX.......XX.", "..XX.....XX..", "..XX.....XX..",
+    "...XX...XX...", "...XX...XX...", "....XX.XX....", "....XXXXX....", ".....XXX.....", "......X......"];
+  const k = painter($("#spLogo").getContext("2d"));
+  V.forEach((row, y) => [...row].forEach((c, x) => { if (c === "X") k(x, y, 1, 1, y >= 9 ? "#e3a83b" : "#f2efe6"); }));
+  const sp = $("#splash");
+  const fim = () => sp.remove();
+  sp.addEventListener("click", e => { e.stopPropagation(); fim(); });
+  setTimeout(fim, 3500);
+  if (location.hash === "#debug") fim();
+})();
+if (location.hash === "#debug") window.__zq = { S, makePerson, MUS, ctx: () => actx };
+renderTools(); renderFicha(); renderHUD();
+startGame();
+requestAnimationFrame(loop);
+})();
+</script>
+<!--GAME-END-->
+<script>
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>
